@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+client/dist/
+
+# Logs and debug
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor / IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing and coverage
+coverage/
+.nyc_output/
+
+# Vite
+*.local
+
+# Tool caches
+.cache/
+.eslintcache
+
+# Optional local Mongo (if you ever add a data volume path here)
+data/
