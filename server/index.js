@@ -31,13 +31,39 @@ async function seedAdmin() {
 
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/cv_builder';
+let server;
+
+async function shutdown(signal) {
+  try {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+      server = null;
+    }
+  } catch (e) {
+    console.error('HTTP server shutdown error:', e?.message || e);
+  }
+  try {
+    await mongoose.disconnect();
+  } catch (e) {
+    console.error('MongoDB disconnect error:', e?.message || e);
+  }
+  if (signal) process.exit(0);
+}
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 mongoose
   .connect(MONGO_URI)
   .then(async () => {
     console.log('MongoDB connected');
     await seedAdmin();
-    app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+    server = app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+    server.on('error', (err) => {
+      // Avoid crashing without context; common case is EADDRINUSE when a previous process still owns the port.
+      console.error('HTTP server error:', err?.message || err);
+      process.exit(1);
+    });
   })
   .catch((err) => {
     console.error('MongoDB connection error:', err.message);

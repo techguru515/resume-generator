@@ -25,6 +25,73 @@ const CONTACT_FIELDS = [
 
 const INPUT_CLS = 'border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent w-full';
 
+function formatWorkDates(w) {
+  if (!w) return '';
+  if (w.current) {
+    const s = String(w.startDate || '').trim();
+    return s ? `${s} – Present` : 'Present';
+  }
+  const s = String(w.startDate || '').trim();
+  const e = String(w.endDate || '').trim();
+  if (s && e) return `${s} – ${e}`;
+  if (s) return s;
+  if (e) return e;
+  return '';
+}
+
+function formatEducationLine(edu) {
+  if (!edu) return '';
+  const parts = [
+    edu.degree,
+    edu.field ? `(${edu.field})` : '',
+  ].filter(Boolean);
+  const head = [edu.institution, parts.join(' ')].filter(Boolean).join(' · ');
+  const y1 = String(edu.startYear || '').trim();
+  const y2 = String(edu.endYear || '').trim();
+  const years = y1 && y2 ? `${y1}–${y2}` : y1 || y2 || '';
+  return years ? `${head} · ${years}` : head;
+}
+
+function ProfileCareerAndEducation({ profile }) {
+  const works = Array.isArray(profile.workExperiences) ? profile.workExperiences : [];
+  const edus = Array.isArray(profile.education) ? profile.education : [];
+
+  return (
+    <div className="mt-3 grid grid-cols-1 gap-4 border-t border-gray-100 pt-3 md:grid-cols-2 md:gap-6">
+      <div className="min-w-0">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Career path</p>
+        {works.length === 0 ? (
+          <p className="text-xs text-gray-400">No work experience yet.</p>
+        ) : (
+          <ul className="space-y-2.5">
+            {works.map((w, i) => (
+              <li key={i} className="text-sm">
+                <p className="font-medium text-primary">{w.role || '—'}</p>
+                <p className="text-xs text-gray-600">{w.company || '—'}</p>
+                <p className="text-xs text-gray-400">{formatWorkDates(w) || '—'}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div className="min-w-0">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Education</p>
+        {edus.length === 0 ? (
+          <p className="text-xs text-gray-400">No education yet.</p>
+        ) : (
+          <ul className="space-y-2.5">
+            {edus.map((edu, i) => (
+              <li key={i} className="text-sm text-gray-700">
+                <p className="leading-snug">{formatEducationLine(edu)}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function InputField({ label, required, placeholder, value, onChange, span }) {
   return (
     <div className={span ? 'md:col-span-2' : ''}>
@@ -131,7 +198,7 @@ export default function ProfilePage() {
   if (loading) return <p className="text-gray-400">Loading…</p>;
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="max-w-4xl space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-primary">My Profiles</h2>
         {!editing && (
@@ -152,23 +219,24 @@ export default function ProfilePage() {
       {profiles.length > 0 && (
         <div className="grid gap-3">
           {profiles.map((p) => (
-            <div key={p._id} className={`bg-white rounded-xl shadow p-4 flex items-start justify-between gap-4 ${editing === p._id ? 'ring-2 ring-accent' : ''}`}>
-              <div>
-                <p className="font-semibold text-primary">{p.label}</p>
-                <p className="text-sm text-gray-600">{p.name} · {p.email}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{[p.phone, p.location].filter(Boolean).join(' · ')}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {[
-                    p.workExperiences?.length ? `${p.workExperiences.length} job(s)` : '',
-                    p.education?.length ? `${p.education.length} education` : '',
-                    p.certifications?.length ? `${p.certifications.length} cert(s)` : '',
-                  ].filter(Boolean).join(' · ')}
-                </p>
+            <div key={p._id} className={`rounded-xl bg-white p-4 shadow ${editing === p._id ? 'ring-2 ring-accent' : ''}`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-primary">{p.label}</p>
+                  <p className="text-sm text-gray-600">{p.name} · {p.email}</p>
+                  <p className="mt-0.5 text-xs text-gray-400">{[p.phone, p.location].filter(Boolean).join(' · ')}</p>
+                  {p.certifications?.length > 0 && (
+                    <p className="mt-0.5 text-xs text-gray-400">
+                      {p.certifications.length} certification{p.certifications.length !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button type="button" onClick={() => startEdit(p)} className="rounded-lg border border-accent px-3 py-1 text-xs text-accent transition hover:bg-blue-50">Edit</button>
+                  <button type="button" onClick={() => handleDelete(p._id)} className="rounded-lg border border-red-200 px-3 py-1 text-xs text-red-400 transition hover:bg-red-50">Delete</button>
+                </div>
               </div>
-              <div className="flex gap-2 shrink-0">
-                <button onClick={() => startEdit(p)} className="text-xs text-accent border border-accent px-3 py-1 rounded-lg hover:bg-blue-50 transition">Edit</button>
-                <button onClick={() => handleDelete(p._id)} className="text-xs text-red-400 border border-red-200 px-3 py-1 rounded-lg hover:bg-red-50 transition">Delete</button>
-              </div>
+              <ProfileCareerAndEducation profile={p} />
             </div>
           ))}
         </div>

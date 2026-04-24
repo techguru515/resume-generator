@@ -1,7 +1,14 @@
+const REMOTE_STATUS_LABELS = {
+  Remote: 'Remote',
+  Hybrid: 'Hybrid',
+  'On-site': 'On-site',
+  Unspecified: 'Not specified',
+};
+
 export default function CVPreview({ cvData, profile }) {
   if (!cvData) return null;
 
-  const { developer_title, summary, skills, experiences } = cvData;
+  const { developer_title, summary, skills, experiences, role_title, company_name, job_type, remote_status } = cvData;
 
   const skillsMap = skills instanceof Map ? skills : new Map(Object.entries(skills || {}));
 
@@ -44,11 +51,35 @@ export default function CVPreview({ cvData, profile }) {
           {contactParts.length > 0 && (
             <p className="text-xs text-gray-500 mt-1">{contactParts.join('  |  ')}</p>
           )}
+          {(role_title || company_name || job_type || (remote_status && remote_status !== 'Unspecified')) && (
+            <p className="text-xs text-gray-500 mt-2 max-w-xl mx-auto leading-relaxed">
+              {[
+                role_title,
+                company_name,
+                job_type,
+                remote_status && remote_status !== 'Unspecified'
+                  ? (REMOTE_STATUS_LABELS[remote_status] || remote_status)
+                  : null,
+              ].filter(Boolean).join(' · ')}
+            </p>
+          )}
         </div>
       ) : (
         <div className="border-b-2 border-accent pb-3">
           <h1 className="text-2xl font-bold text-primary">{developer_title}</h1>
           <p className="text-xs text-yellow-600 mt-1">Select a profile to see full preview with your name and contact info.</p>
+          {(role_title || company_name || job_type || (remote_status && remote_status !== 'Unspecified')) && (
+            <p className="text-xs text-gray-500 mt-2">
+              {[
+                role_title,
+                company_name,
+                job_type,
+                remote_status && remote_status !== 'Unspecified'
+                  ? (REMOTE_STATUS_LABELS[remote_status] || remote_status)
+                  : null,
+              ].filter(Boolean).join(' · ')}
+            </p>
+          )}
         </div>
       )}
 

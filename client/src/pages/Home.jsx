@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listCVs, deleteCV, updateCVStatus, listProfiles } from '../api.js';
+import { profileRefToIdString } from '../utils/profileRef.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const STATUS_CONFIG = {
@@ -82,8 +83,12 @@ function ProfileCard({ profile, cvs, onStatusChange, onDelete, onNavigate }) {
                   <StatusBadge status={cv.application_status || 'saved'} />
                 </div>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {cv.company_name} · {cv.job_type}
-                  {cv.salary_range ? ` · ${cv.salary_range}` : ''}
+                  {[
+                    cv.company_name,
+                    cv.job_type,
+                    cv.remote_status && cv.remote_status !== 'Unspecified' ? cv.remote_status : null,
+                    cv.salary_range || null,
+                  ].filter(Boolean).join(' · ')}
                 </p>
                 <div className="flex items-center gap-3 mt-0.5">
                   <span className="text-xs text-gray-400">
@@ -184,10 +189,10 @@ export default function Home() {
   }, {});
 
   // Group CVs by profileId — also show unmatched under "No profile"
-  const profileMap = Object.fromEntries(profiles.map((p) => [p._id, []]));
+  const profileMap = Object.fromEntries(profiles.map((p) => [String(p._id), []]));
   const unmatched = [];
   cvList.forEach((cv) => {
-    const pid = cv.profileId?.toString?.() || cv.profileId;
+    const pid = profileRefToIdString(cv.profileId);
     if (pid && profileMap[pid]) profileMap[pid].push(cv);
     else unmatched.push(cv);
   });
@@ -234,7 +239,7 @@ export default function Home() {
             <ProfileCard
               key={p._id}
               profile={p}
-              cvs={profileMap[p._id] || []}
+              cvs={profileMap[String(p._id)] || []}
               onStatusChange={handleStatusChange}
               onDelete={handleDelete}
               onNavigate={(cvId) => navigate(`/cv/${cvId}`)}

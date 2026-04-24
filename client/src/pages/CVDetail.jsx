@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { getCV, deleteCV, getProfileById, updateCVStatus } from '../api.js';
+import { profileRefToIdString } from '../utils/profileRef.js';
 import CVPreview from '../components/CVPreview.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -14,6 +15,13 @@ const STATUS_CONFIG = {
 };
 
 const ALL_STATUSES = Object.keys(STATUS_CONFIG);
+
+const REMOTE_STATUS_LABELS = {
+  Remote: 'Remote',
+  Hybrid: 'Hybrid',
+  'On-site': 'On-site',
+  Unspecified: 'Not specified',
+};
 
 async function downloadFile(url, filename) {
   const token = localStorage.getItem('token');
@@ -56,7 +64,8 @@ export default function CVDetail() {
     getCV(id)
       .then((data) => {
         setCv(data);
-        if (data.profileId) getProfileById(data.profileId).then(setProfile).catch(() => {});
+        const pid = profileRefToIdString(data.profileId);
+        if (pid) getProfileById(pid).then(setProfile).catch(() => {});
       })
       .catch((err) => setError(err.response?.data?.error || err.message))
       .finally(() => setLoading(false));
@@ -161,9 +170,13 @@ export default function CVDetail() {
         </div>
 
         {/* Info grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <InfoCard label="Company"      value={cv.company_name} />
           <InfoCard label="Job Type"     value={cv.job_type} />
+          <InfoCard
+            label="Work mode"
+            value={REMOTE_STATUS_LABELS[cv.remote_status] || REMOTE_STATUS_LABELS.Unspecified}
+          />
           <InfoCard label="Salary Range" value={cv.salary_range || 'Not specified'} />
           <InfoCard label="Applied On"   value={new Date(cv.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} />
         </div>

@@ -9,5 +9,7 @@ router.post('/', ctrl.saveBatch);
 /** POST (not DELETE) so JSON body survives Vite/webpack dev proxies reliably */
 router.post('/delete-batch', ctrl.removeBatch);
 router.post('/set-profile', ctrl.setProfileForLinks);
+router.post('/set-jd', ctrl.setJobDescriptionForLink);
+router.post('/generate-cvs', ctrl.generateCvsForLinks);
 
 module.exports = router;

@@ -22,7 +22,7 @@ export default function CreateCV() {
     listProfiles().then((data) => {
       setProfiles(data);
       if (data.length > 0) {
-        setSelectedProfileId(data[0]._id);
+        setSelectedProfileId(String(data[0]._id));
         setSelectedProfile(data[0]);
       }
     }).catch(() => {});
@@ -100,11 +100,11 @@ export default function CreateCV() {
             ) : (
               <div className="space-y-2">
                 {profiles.map((p) => {
-                  const active = selectedProfileId === p._id;
+                  const active = String(selectedProfileId) === String(p._id);
                   return (
                     <div
                       key={p._id}
-                      onClick={() => { setSelectedProfileId(p._id); setSelectedProfile(p); }}
+                      onClick={() => { setSelectedProfileId(String(p._id)); setSelectedProfile(p); }}
                       className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
                         active ? 'border-accent bg-blue-50' : 'border-gray-200 hover:border-gray-300'
                       }`}

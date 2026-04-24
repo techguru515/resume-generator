@@ -8,6 +8,7 @@ const UploadedLinkSchema = new mongoose.Schema(
     url: { type: String, required: true },
     normalizedUrl: { type: String, required: true },
     isDuplicate: { type: Boolean, default: false },
+    jobDescriptionId: { type: mongoose.Schema.Types.ObjectId, ref: 'JobDescription', default: null },
     cvStatus: {
       type: String,
       enum: ['not_started', 'pending', 'created', 'failed'],

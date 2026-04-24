@@ -4,8 +4,15 @@ const { generateDocx } = require('../services/docxService');
 const { generatePdf } = require('../services/pdfService');
 const { generateCvJsonWithOpenAI } = require('../services/openaiCvService');
 
+function rawProfileIdRef(ref) {
+  if (ref == null) return null;
+  if (typeof ref === 'object' && ref !== null && ref._id != null) return ref._id;
+  return ref;
+}
+
 async function getProfileById(profileId) {
-  const profile = await Profile.findById(profileId);
+  const id = rawProfileIdRef(profileId);
+  const profile = await Profile.findById(id);
   if (!profile) throw new Error('Profile not found. Please select a valid profile.');
   return profile;
 }
@@ -63,7 +70,8 @@ exports.list = async (req, res) => {
     const cvs = await CV.find(ownerFilter(req))
       .sort({ createdAt: -1 })
       .select('-experiences -skills -summary -job_description -__v')
-      .populate('userId', 'name email');
+      .populate('userId', 'name email')
+      .populate('profileId', 'label');
     res.json(cvs);
   } catch (err) {
     res.status(500).json({ error: err.message });

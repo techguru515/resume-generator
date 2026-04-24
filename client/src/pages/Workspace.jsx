@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { listProfiles, listCVs, listWorkspaceLinks, saveWorkspaceLinks, deleteWorkspaceLinks } from '../api.js';
+import { Link } from 'react-router-dom';
+import { listProfiles, listCVs, listWorkspaceLinks, saveWorkspaceLinks, deleteWorkspaceLinks, generateCvsForWorkspaceLinks, setProfileForWorkspaceLinks, setJobDescriptionForWorkspaceLink } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import Pagination from '../components/Pagination.jsx';
+import { profileRefToIdString, profileRefToLabel } from '../utils/profileRef.js';
 
 const STATUS_CONFIG = {
   saved:     { label: 'Saved',     badge: 'bg-gray-100 text-gray-600',    dot: 'bg-gray-400' },
@@ -29,22 +30,26 @@ function LinkSelectIcon({ checked, indeterminate = false }) {
       ? 'border-accent bg-blue-50 text-accent shadow-sm'
       : 'border-gray-300 bg-white text-gray-400 hover:border-primary/50 hover:bg-slate-50';
   return (
-    <span className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border-2 transition ${boxClass}`} aria-hidden>
+    <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md border transition ${boxClass}`} aria-hidden>
       {indeterminate ? (
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
           <path d="M6 12h12" />
         </svg>
       ) : checked ? (
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
           <path d="M20 6L9 17l-5-5" />
         </svg>
       ) : (
-        <svg className="w-4 h-4 opacity-35" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <svg className="w-3 h-3 opacity-35" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <path d="M20 6L9 17l-5-5" />
         </svg>
       )}
     </span>
   );
+}
+
+function openCvInNewWindow(cvId) {
+  window.open(`/cv/${cvId}`, '_blank', 'noopener,noreferrer');
 }
 
 function TrashIcon({ className = 'w-4 h-4' }) {
@@ -55,35 +60,54 @@ function TrashIcon({ className = 'w-4 h-4' }) {
   );
 }
 
-function DuplicateBadge({ isDuplicate }) {
-  if (isDuplicate) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-        Duplicate
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-      Unique
-    </span>
-  );
-}
-
 function CvCreateBadge({ status }) {
   const s = String(status || 'not_started');
   const cfg = {
-    not_started: { label: 'Not started', cls: 'bg-gray-100 text-gray-600' },
+    not_started: { label: 'Empty', cls: 'bg-gray-100 text-gray-600' },
     pending: { label: 'Creating…', cls: 'bg-blue-100 text-blue-700' },
     created: { label: 'Created', cls: 'bg-emerald-100 text-emerald-800' },
     failed: { label: 'Failed', cls: 'bg-red-100 text-red-700' },
-  }[s] || { label: 'Not started', cls: 'bg-gray-100 text-gray-600' };
+  }[s] || { label: 'Empty', cls: 'bg-gray-100 text-gray-600' };
 
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cfg.cls}`}>
       {cfg.label}
     </span>
   );
+}
+
+/** Pipeline order for CV status column sort */
+const LINK_CV_STATUS_RANK = {
+  not_started: 0,
+  pending: 1,
+  created: 2,
+  failed: 3,
+};
+
+/** CV status only; used with linkCvStatusSort dropdown */
+function compareCvStatusWithMode(a, b, mode) {
+  const empty = (r) => !r.cvStatus || r.cvStatus === 'not_started';
+  const aE = empty(a);
+  const bE = empty(b);
+  const raw = () => {
+    const ra = LINK_CV_STATUS_RANK[String(a.cvStatus || 'not_started')] ?? 99;
+    const rb = LINK_CV_STATUS_RANK[String(b.cvStatus || 'not_started')] ?? 99;
+    return ra - rb;
+  };
+  if (mode === 'absentLast') {
+    if (aE && !bE) return 1;
+    if (!aE && bE) return -1;
+    if (aE && bE) return 0;
+    return -raw();
+  }
+  if (mode === 'absentFirst') {
+    if (aE && !bE) return -1;
+    if (!aE && bE) return 1;
+    if (aE && bE) return 0;
+    return raw();
+  }
+  const r = raw();
+  return mode === 'desc' ? -r : r;
 }
 
 const ALL_STATUSES = Object.keys(STATUS_CONFIG);
@@ -114,12 +138,9 @@ function formatLinkDate(iso) {
 }
 
 function formatUpdatedCell(row) {
-  const c = row.createdAt ? new Date(row.createdAt).getTime() : 0;
-  const u = row.updatedAt ? new Date(row.updatedAt).getTime() : c;
   if (row.isDuplicate) {
     return formatLinkDate(row.updatedAt || row.createdAt);
   }
-  if (u !== c) return formatLinkDate(row.updatedAt);
   return '—';
 }
 
@@ -181,13 +202,9 @@ async function extractUrlsFromFile(file) {
 
 export default function Workspace() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const fileInputRef = useRef(null);
-  const selectedProfileIdRef = useRef('');
 
   const [profiles, setProfiles] = useState([]);
-  const [selectedProfileId, setSelectedProfileId] = useState('');
-  const [selectedProfile, setSelectedProfile] = useState(null);
 
   const [savedLinks, setSavedLinks] = useState([]);
   const [loadingSavedLinks, setLoadingSavedLinks] = useState(true);
@@ -204,36 +221,38 @@ export default function Workspace() {
   const [tableProfileFilter, setTableProfileFilter] = useState('all');
   const [linkSearch, setLinkSearch] = useState('');
   const [linkProfileFilter, setLinkProfileFilter] = useState('all');
-  const [linkStatusFilter, setLinkStatusFilter] = useState('all'); // all | unique | duplicate
   const [linkPage, setLinkPage] = useState(1);
   const [cvPage, setCvPage] = useState(1);
   const [linkPageSize, setLinkPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [cvPageSize, setCvPageSize] = useState(DEFAULT_PAGE_SIZE);
 
-  const [linkSortField, setLinkSortField] = useState('updated');
-  const [linkSortOrder, setLinkSortOrder] = useState('desc');
+  /** Saved links table: default = newest created first; optional primary sort by CV status */
+  const [linkCvStatusSort, setLinkCvStatusSort] = useState('default');
   const [cvSortField, setCvSortField] = useState('updated');
   const [cvSortOrder, setCvSortOrder] = useState('desc');
 
   const [selectedLinkIds, setSelectedLinkIds] = useState([]);
   const [deletingLinks, setDeletingLinks] = useState(false);
+  const [generatingLinks, setGeneratingLinks] = useState(false);
+  const [updatingProfileLinkIds, setUpdatingProfileLinkIds] = useState([]);
   const linkSelectAllRef = useRef(null);
+
+  const [manualUrl, setManualUrl] = useState('');
+  const [creatingManualLink, setCreatingManualLink] = useState(false);
+
+  const [jdOpenLinkId, setJdOpenLinkId] = useState('');
+  const [jdByLinkId, setJdByLinkId] = useState({});
+  const [savingJdLinkIds, setSavingJdLinkIds] = useState([]);
+  const [jdSaveErrorByLinkId, setJdSaveErrorByLinkId] = useState({});
+  const jdSaveTimersRef = useRef({});
 
   useEffect(() => {
     listProfiles()
       .then((data) => {
-        setProfiles(data);
-        if (data.length > 0) {
-          setSelectedProfileId(data[0]._id);
-          setSelectedProfile(data[0]);
-        }
+        setProfiles(Array.isArray(data) ? data : []);
       })
       .catch(() => {});
   }, []);
-
-  useEffect(() => {
-    selectedProfileIdRef.current = selectedProfileId;
-  }, [selectedProfileId]);
 
   useEffect(() => {
     if (!user?.isApproved && user?.role !== 'admin') {
@@ -247,6 +266,22 @@ export default function Workspace() {
       .catch(() => setSavedLinks([]))
       .finally(() => setLoadingSavedLinks(false));
   }, [user]);
+
+  // Hydrate local JD cache from DB (without overwriting local edits).
+  useEffect(() => {
+    if (!Array.isArray(savedLinks) || savedLinks.length === 0) return;
+    setJdByLinkId((prev) => {
+      const next = { ...prev };
+      for (const l of savedLinks) {
+        const id = String(l?._id || '');
+        if (!id) continue;
+        if (next[id] != null) continue;
+        const txt = l?.jobDescriptionId?.text;
+        if (txt) next[id] = String(txt);
+      }
+      return next;
+    });
+  }, [savedLinks]);
 
   useEffect(() => {
     if (!user?.isApproved && user?.role !== 'admin') return;
@@ -311,15 +346,21 @@ export default function Workspace() {
     e.target.value = '';
   }
 
+  const profileLabelById = useMemo(
+    () => Object.fromEntries(profiles.map((p) => [String(p._id), p.label])),
+    [profiles]
+  );
+
   const filteredCvs = useMemo(() => {
     const q = search.trim().toLowerCase();
     return cvList.filter((cv) => {
-      const pid = String(cv.profileId ?? '');
+      const pid = profileRefToIdString(cv.profileId);
       if (tableProfileFilter !== 'all' && pid !== tableProfileFilter) return false;
       const st = cv.application_status || 'saved';
       if (statusFilter !== 'all' && st !== statusFilter) return false;
       if (q) {
-        const hay = [cv.role_title, cv.company_name, cv.job_type, cv.salary_range]
+        const profLabel = profileRefToLabel(cv.profileId, profileLabelById).toLowerCase();
+        const hay = [cv.role_title, cv.company_name, cv.job_type, cv.remote_status, cv.salary_range, profLabel]
           .filter(Boolean)
           .join(' ')
           .toLowerCase();
@@ -327,27 +368,20 @@ export default function Workspace() {
       }
       return true;
     });
-  }, [cvList, search, statusFilter, tableProfileFilter]);
-
-  const profileLabelById = useMemo(
-    () => Object.fromEntries(profiles.map((p) => [String(p._id), p.label])),
-    [profiles]
-  );
+  }, [cvList, search, statusFilter, tableProfileFilter, profileLabelById]);
 
   const linkTableRows = useMemo(() => {
     const list = Array.isArray(savedLinks) ? savedLinks : [];
     const q = linkSearch.trim().toLowerCase();
     const rows = list
       .filter((row) => {
-        const pid = row.profileId != null ? String(row.profileId) : '';
+        const pid = profileRefToIdString(row.profileId);
         if (linkProfileFilter !== 'all' && pid !== String(linkProfileFilter)) return false;
 
         if (!q) return true;
         const url = (row.url || '').toLowerCase();
         const fname = (row.sourceFileName || '').toLowerCase();
-        const pl = String(
-          (row.profileId && profileLabelById[String(row.profileId)]) || ''
-        ).toLowerCase();
+        const pl = String(profileRefToLabel(row.profileId, profileLabelById) || '').toLowerCase();
         return url.includes(q) || fname.includes(q) || pl.includes(q);
       })
       .map((row) => ({
@@ -356,42 +390,40 @@ export default function Workspace() {
         url: row.url,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
-        // Display status is derived from timestamps:
-        // - Unique: updatedAt equals createdAt (shows "—" in Updated column)
-        // - Duplicate: updatedAt differs from createdAt (link re-upload / merge)
-        isDuplicate: (() => {
-          const c = row.createdAt ? new Date(row.createdAt).getTime() : 0;
-          const u = row.updatedAt ? new Date(row.updatedAt).getTime() : c;
-          return Boolean(c && u && u !== c);
-        })(),
+        // Duplicate only when the same normalized URL is saved again (server sets isDuplicate).
+        isDuplicate: row.isDuplicate === true,
         profileId: row.profileId,
         cvStatus: row.cvStatus || 'not_started',
       }));
 
-    const status = String(linkStatusFilter || 'all');
-    const filteredByStatus =
-      status === 'all'
-        ? rows
-        : status === 'duplicate'
-          ? rows.filter((r) => r.isDuplicate)
-          : rows.filter((r) => !r.isDuplicate);
+    /** Newest created first; ties break by newest updated */
+    const defaultLinkOrder = (a, b) => {
+      const ca = new Date(a.createdAt || 0).getTime();
+      const cb = new Date(b.createdAt || 0).getTime();
+      if (cb !== ca) return cb - ca;
+      return (
+        new Date(b.updatedAt || b.createdAt || 0).getTime() -
+        new Date(a.updatedAt || a.createdAt || 0).getTime()
+      );
+    };
 
-    const mul = linkSortOrder === 'desc' ? -1 : 1;
-    filteredByStatus.sort((a, b) => {
-      let cmp = 0;
-      if (linkSortField === 'profile') {
-        const la = String(profileLabelById[String(a.profileId)] || '').toLowerCase();
-        const lb = String(profileLabelById[String(b.profileId)] || '').toLowerCase();
-        cmp = la.localeCompare(lb, undefined, { sensitivity: 'base' });
-      } else if (linkSortField === 'created') {
-        cmp = new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
-      } else {
-        cmp = new Date(a.updatedAt || a.createdAt || 0).getTime() - new Date(b.updatedAt || b.createdAt || 0).getTime();
+    rows.sort((a, b) => {
+      if (linkCvStatusSort !== 'default') {
+        const mode =
+          linkCvStatusSort === 'pipeline'
+            ? 'asc'
+            : linkCvStatusSort === 'pipelineDesc'
+              ? 'desc'
+              : linkCvStatusSort === 'emptyFirst'
+                ? 'absentFirst'
+                : 'absentLast';
+        const c = compareCvStatusWithMode(a, b, mode);
+        if (c !== 0) return c;
       }
-      return cmp * mul;
+      return defaultLinkOrder(a, b);
     });
-    return filteredByStatus;
-  }, [savedLinks, linkSearch, linkProfileFilter, linkStatusFilter, profileLabelById, linkSortField, linkSortOrder]);
+    return rows;
+  }, [savedLinks, linkSearch, linkProfileFilter, profileLabelById, linkCvStatusSort]);
 
   const sortedFilteredCvs = useMemo(() => {
     const rows = [...filteredCvs];
@@ -399,8 +431,8 @@ export default function Workspace() {
     rows.sort((a, b) => {
       let cmp = 0;
       if (cvSortField === 'profile') {
-        const la = String(profileLabelById[String(a.profileId ?? '')] || '').toLowerCase();
-        const lb = String(profileLabelById[String(b.profileId ?? '')] || '').toLowerCase();
+        const la = String(profileRefToLabel(a.profileId, profileLabelById) || '').toLowerCase();
+        const lb = String(profileRefToLabel(b.profileId, profileLabelById) || '').toLowerCase();
         cmp = la.localeCompare(lb, undefined, { sensitivity: 'base' });
       } else if (cvSortField === 'jobType') {
         const la = String(a.job_type || '').toLowerCase();
@@ -416,8 +448,6 @@ export default function Workspace() {
     return rows;
   }, [filteredCvs, profileLabelById, cvSortField, cvSortOrder]);
 
-  const totalExtractedLinks = useMemo(() => savedLinks.length, [savedLinks]);
-
   const anyLinkExtracting = uploadedFiles.some((f) => f.extracting);
 
   useEffect(() => {
@@ -427,7 +457,7 @@ export default function Workspace() {
 
   useEffect(() => {
     setLinkPage(1);
-  }, [linkSearch, linkProfileFilter, linkStatusFilter, linkPageSize, linkSortField, linkSortOrder]);
+  }, [linkSearch, linkProfileFilter, linkPageSize, linkCvStatusSort]);
 
   useEffect(() => {
     const tp = Math.ceil(linkTableRows.length / linkPageSize) || 1;
@@ -497,6 +527,129 @@ export default function Workspace() {
     }
   }, []);
 
+  const createManualLink = useCallback(async () => {
+    const url = manualUrl.trim();
+    if (!url) {
+      setLinksError('Paste a URL first.');
+      return;
+    }
+    setCreatingManualLink(true);
+    setLinksError('');
+    try {
+      await saveWorkspaceLinks({ sourceFileName: 'manual', urls: [url] });
+      setManualUrl('');
+      const fresh = await listWorkspaceLinks();
+      setSavedLinks(Array.isArray(fresh) ? fresh : []);
+    } catch (err) {
+      setLinksError(err.response?.data?.error || err.message || 'Failed to save link');
+    } finally {
+      setCreatingManualLink(false);
+    }
+  }, [manualUrl]);
+
+  const setProfileForLinkIds = useCallback(async ({ ids, profileId }) => {
+    const unique = [...new Set((ids || []).map(String))].filter(Boolean);
+    if (unique.length === 0) return;
+    setLinksError('');
+    setUpdatingProfileLinkIds((prev) => [...new Set([...prev, ...unique])]);
+    try {
+      await setProfileForWorkspaceLinks({ ids: unique, profileId: profileId ?? '' });
+      const fresh = await listWorkspaceLinks();
+      setSavedLinks(Array.isArray(fresh) ? fresh : []);
+    } catch (err) {
+      setLinksError(err.response?.data?.error || err.message || 'Failed to set profile');
+    } finally {
+      setUpdatingProfileLinkIds((prev) => prev.filter((id) => !unique.includes(String(id))));
+    }
+  }, []);
+
+  const generateCvsByLinkIds = useCallback(async (ids) => {
+    const unique = [...new Set((ids || []).map(String))].filter(Boolean);
+    if (unique.length === 0) return;
+
+    const linkById = Object.fromEntries((Array.isArray(savedLinks) ? savedLinks : []).map((l) => [String(l._id), l]));
+    const validProfileIds = new Set(profiles.map((p) => String(p._id)));
+
+    const linksWithoutProfile = unique.filter((id) => {
+      const pid = profileRefToIdString(linkById[id]?.profileId);
+      return !pid || !validProfileIds.has(pid);
+    });
+
+    if (linksWithoutProfile.length > 0) {
+      const msg = profiles.length === 0
+        ? 'Create a profile on the Profile page, then assign it to each selected link before generating.'
+        : `${linksWithoutProfile.length} selected link(s) have no profile or a removed profile. Choose a profile in the Profile column for each row.`;
+      setLinksError(msg);
+      window.alert(msg);
+      return;
+    }
+
+    const jobDescriptionsByLinkId = Object.fromEntries(
+      unique.map((id) => [id, String(jdByLinkId[id] || '').trim()])
+    );
+    const missing = unique.filter((id) => !jobDescriptionsByLinkId[id] || jobDescriptionsByLinkId[id].length < 40);
+    if (missing.length > 0) {
+      setLinksError(`Add a JD (min ~40 chars) for ${missing.length} selected link(s) first. Click "JD" on each link to paste it.`);
+      return;
+    }
+
+    setGeneratingLinks(true);
+    setLinksError('');
+    try {
+      const resp = await generateCvsForWorkspaceLinks({
+        ids: unique,
+        profileId: '',
+        jobDescriptionsByLinkId,
+      });
+      if (resp?.links) setSavedLinks(Array.isArray(resp.links) ? resp.links : []);
+      const freshCvs = await listCVs();
+      setCvList(Array.isArray(freshCvs) ? freshCvs : []);
+      if (resp?.failedCount) {
+        const first = Array.isArray(resp.failed) && resp.failed[0]?.error ? resp.failed[0].error : 'Some CVs failed to generate';
+        setLinksError(`${resp.failedCount} failed. First error: ${first}`);
+      }
+    } catch (err) {
+      setLinksError(err.response?.data?.error || err.message || 'Failed to generate CVs');
+    } finally {
+      setGeneratingLinks(false);
+    }
+  }, [jdByLinkId, savedLinks, profiles]);
+
+  const toggleJdForRow = useCallback((row) => {
+    const id = String(row?.key || '');
+    if (!id) return;
+    setJdOpenLinkId((cur) => (cur === id ? '' : id));
+  }, []);
+
+  const queueSaveJd = useCallback(({ id, jobDescription }) => {
+    const sid = String(id || '');
+    if (!sid) return;
+
+    // Clear previous debounce timer for this link.
+    const prevTimer = jdSaveTimersRef.current[sid];
+    if (prevTimer) {
+      clearTimeout(prevTimer);
+      delete jdSaveTimersRef.current[sid];
+    }
+
+    jdSaveTimersRef.current[sid] = setTimeout(async () => {
+      setSavingJdLinkIds((prev) => [...new Set([...prev, sid])]);
+      setJdSaveErrorByLinkId((prev) => ({ ...prev, [sid]: '' }));
+      try {
+        const updated = await setJobDescriptionForWorkspaceLink({ id: sid, jobDescription });
+        // Keep table data in sync so reloads / other UI reads the DB value.
+        setSavedLinks((prev) =>
+          (Array.isArray(prev) ? prev : []).map((l) => (String(l?._id || '') === sid ? updated : l))
+        );
+      } catch (err) {
+        const msg = err?.response?.data?.error || err?.message || 'Failed to save JD';
+        setJdSaveErrorByLinkId((prev) => ({ ...prev, [sid]: String(msg) }));
+      } finally {
+        setSavingJdLinkIds((prev) => prev.filter((x) => String(x) !== sid));
+      }
+    }, 650);
+  }, []);
+
   const paginatedCvs = useMemo(() => {
     const start = (cvPage - 1) * cvPageSize;
     return sortedFilteredCvs.slice(start, start + cvPageSize);
@@ -516,151 +669,96 @@ export default function Workspace() {
     <div className="max-w-6xl mx-auto space-y-6">
       <h2 className="text-xl font-bold text-primary">Workspace</h2>
 
-      <div className="grid md:grid-cols-[2fr_3fr] gap-6">
-        <div className="space-y-5">
-          {/* File upload */}
-          <div className="bg-white rounded-2xl shadow p-5 space-y-3">
-            <label className="block text-sm font-semibold text-gray-700">Upload files</label>
-            <p className="text-xs text-gray-400">
-              Drag and drop or browse. PDF, Word, HTML, and plain text.{' '}
-              <strong className="text-gray-600">http(s)://</strong> links are extracted and <strong className="text-gray-600">saved to your account</strong> with the active profile (if any). File names are kept for this session only.
-            </p>
-            <div
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click(); }}
-              onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
-              onDragLeave={(e) => { e.preventDefault(); if (!e.currentTarget.contains(e.relatedTarget)) setDragActive(false); }}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl px-4 py-10 text-center cursor-pointer transition ${
-                dragActive ? 'border-accent bg-blue-50' : 'border-gray-200 hover:border-gray-300 bg-gray-50/50'
-              }`}
-            >
-              <p className="text-2xl mb-2" aria-hidden>📎</p>
-              <p className="text-sm font-medium text-gray-700">Drop files here</p>
-              <p className="text-xs text-gray-400 mt-1">or click to choose</p>
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={ACCEPT_UPLOAD}
-              className="hidden"
-              onChange={handleFileInput}
-            />
-            {uploadedFiles.length > 0 && (
-              <ul className="divide-y border border-gray-100 rounded-lg overflow-hidden">
-                {uploadedFiles.map((item) => (
-                  <li key={item.id} className="flex items-center gap-3 px-3 py-2.5 bg-white text-sm">
-                    <span className="text-gray-400 shrink-0">📄</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-primary truncate">{item.name}</p>
-                      <p className="text-xs text-gray-400">
-                        {formatBytes(item.size)}
-                        {item.extracting ? (
-                          <span className="text-accent ml-2">Scanning for links…</span>
-                        ) : (
-                          <span className="text-gray-500 ml-2">
-                            {(item.urls?.length || 0)} link{(item.urls?.length || 0) !== 1 ? 's' : ''} found
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); removeUploaded(item.id); }}
-                      className="text-xs text-red-500 hover:text-red-700 shrink-0 px-2 py-1 rounded-lg hover:bg-red-50"
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* Profiles — same pattern as Create CV */}
-          <div className="bg-white rounded-2xl shadow p-5">
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Select profile</label>
-            <p className="text-xs text-gray-400 mb-3">Default context for this workspace; the table below can still filter by any profile.</p>
-            {profiles.length === 0 ? (
-              <p className="text-yellow-600 text-sm">
-                No profiles yet. <Link to="/profile" className="underline">Create one →</Link>
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {profiles.map((p) => {
-                  const active = selectedProfileId === p._id;
-                  return (
-                    <div
-                      key={p._id}
-                      onClick={() => { setSelectedProfileId(p._id); setSelectedProfile(p); }}
-                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
-                        active ? 'border-accent bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div
-                        className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                          active ? 'border-accent bg-accent' : 'border-gray-300'
-                        }`}
-                      >
-                        {active && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-primary">{p.label}</p>
-                        <p className="text-xs text-gray-500">{p.name} · {p.email}</p>
-                        <p className="text-xs text-gray-400">
-                          {[
-                            p.workExperiences?.length ? `${p.workExperiences.length} job(s)` : '',
-                            p.education?.length ? `${p.education.length} education` : '',
-                            p.certifications?.length ? `${p.certifications.length} cert(s)` : '',
-                          ].filter(Boolean).join(' · ')}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
+      {/* Upload files + manual link (stacked) */}
+      <div className="bg-white rounded-2xl shadow p-5">
+        <div className="space-y-8">
+              <div className="space-y-3 min-w-0">
+                <label className="block text-sm font-semibold text-gray-700">Upload files</label>
+                <p className="text-xs text-gray-400">
+                  Drag and drop or browse. PDF, Word, HTML, and plain text.{' '}
+                  <strong className="text-gray-600">http(s)://</strong> links are extracted and <strong className="text-gray-600">saved to your account</strong>. File names are kept for this session only.
+                </p>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click(); }}
+                  onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
+                  onDragLeave={(e) => { e.preventDefault(); if (!e.currentTarget.contains(e.relatedTarget)) setDragActive(false); }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl px-4 py-10 text-center cursor-pointer transition ${
+                    dragActive ? 'border-accent bg-blue-50' : 'border-gray-200 hover:border-gray-300 bg-gray-50/50'
+                  }`}
+                >
+                  <p className="text-2xl mb-2" aria-hidden>📎</p>
+                  <p className="text-sm font-medium text-gray-700">Drop files here</p>
+                  <p className="text-xs text-gray-400 mt-1">or click to choose</p>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={ACCEPT_UPLOAD}
+                  className="hidden"
+                  onChange={handleFileInput}
+                />
+                {uploadedFiles.length > 0 && (
+                  <ul className="divide-y border border-gray-100 rounded-lg overflow-hidden">
+                    {uploadedFiles.map((item) => (
+                      <li key={item.id} className="flex items-center gap-3 px-3 py-2.5 bg-white text-sm">
+                        <span className="text-gray-400 shrink-0">📄</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-primary truncate">{item.name}</p>
+                          <p className="text-xs text-gray-400">
+                            {formatBytes(item.size)}
+                            {item.extracting ? (
+                              <span className="text-accent ml-2">Scanning for links…</span>
+                            ) : (
+                              <span className="text-gray-500 ml-2">
+                                {(item.urls?.length || 0)} link{(item.urls?.length || 0) !== 1 ? 's' : ''} found
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); removeUploaded(item.id); }}
+                          className="text-xs text-red-500 hover:text-red-700 shrink-0 px-2 py-1 rounded-lg hover:bg-red-50"
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-            )}
-          </div>
-        </div>
 
-        <div>
-          <div className="bg-white rounded-2xl shadow p-6 sticky top-4 space-y-4">
-            <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Summary</p>
-            <div className="text-sm text-gray-600 space-y-2">
-              <p>
-                <span className="font-semibold text-primary">{uploadedFiles.length}</span> file{uploadedFiles.length !== 1 ? 's' : ''} staged
-              </p>
-              <p>
-                Links saved (database): <span className="font-semibold text-primary">{totalExtractedLinks}</span>
-                {anyLinkExtracting && <span className="text-xs text-gray-400 ml-1">(scanning…)</span>}
-              </p>
-              <p>
-                Active profile:{' '}
-                <span className="font-semibold text-primary">{selectedProfile?.label || '—'}</span>
-              </p>
-              <p>
-                Saved CVs: <span className="font-semibold text-primary">{cvList.length}</span>
-              </p>
-            </div>
-            <div className="pt-2 border-t border-gray-100 flex flex-wrap gap-2">
-              <Link
-                to="/create"
-                className="inline-flex items-center rounded-lg bg-violet-600 text-white text-sm font-medium px-4 py-2 hover:bg-violet-700 transition"
-              >
-                Create CV
-              </Link>
-              <Link
-                to="/"
-                className="inline-flex items-center rounded-lg border border-gray-200 text-sm font-medium px-4 py-2 text-gray-700 hover:bg-gray-50 transition"
-              >
-                Dashboard
-              </Link>
-            </div>
-          </div>
+              <div className="space-y-3 min-w-0 border-t border-gray-100 pt-8">
+                <label className="block text-sm font-semibold text-gray-700">Add link manually</label>
+                <p className="text-xs text-gray-400">
+                  Paste a job posting URL and save it to your saved hyperlinks (same rules as extracted links).
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                  <input
+                    type="url"
+                    value={manualUrl}
+                    onChange={(e) => setManualUrl(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') createManualLink(); }}
+                    placeholder="https://…"
+                    className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                  />
+                  <button
+                    type="button"
+                    onClick={createManualLink}
+                    disabled={creatingManualLink || deletingLinks || generatingLinks}
+                    className="inline-flex shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white text-sm font-semibold px-4 py-2.5 hover:bg-emerald-700 disabled:opacity-50 sm:w-28"
+                    title="Add this link to your account"
+                  >
+                    {creatingManualLink ? 'Saving…' : 'Add'}
+                  </button>
+                </div>
+              </div>
         </div>
       </div>
 
@@ -672,26 +770,26 @@ export default function Workspace() {
             <div className="min-w-0">
               <h3 className="text-sm font-bold text-primary">Saved hyperlinks</h3>
               <p className="text-xs text-gray-400 mt-0.5">
-                New URLs are saved once per account (normalized). If the same URL is uploaded again, the existing row is updated: <strong className="text-gray-600">Updated</strong> is set to now and <strong className="text-gray-600">Created</strong> becomes the previous <strong className="text-gray-600">Updated</strong> time.
+                New URLs are saved once per account (normalized). If the same URL is uploaded again, that row is marked <strong className="text-gray-600">Duplicate</strong>, <strong className="text-gray-600">Updated</strong> shows the last re-upload time, and <strong className="text-gray-600">Created</strong> stays the first time you saved it. Changing profile, JD, or CV status does not change duplicate status or these times.
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full">
-              <div className="w-full sm:w-56">
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Filter links</label>
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4">
+              <div className="min-w-0">
+                <label className="block text-xs font-semibold text-gray-500 mb-0.5">Filter links</label>
                 <input
                   type="search"
                   value={linkSearch}
                   onChange={(e) => setLinkSearch(e.target.value)}
                   placeholder="URL or file name…"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
                 />
               </div>
-              <div className="w-full sm:w-40">
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Profile</label>
+              <div className="min-w-0">
+                <label className="block text-xs font-semibold text-gray-500 mb-0.5">Profile</label>
                 <select
                   value={linkProfileFilter}
                   onChange={(e) => setLinkProfileFilter(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
+                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
                 >
                   <option value="all">All profiles</option>
                   <option value="">No profile</option>
@@ -700,51 +798,30 @@ export default function Workspace() {
                   ))}
                 </select>
               </div>
-              <div className="w-full sm:w-40">
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Status</label>
+              <div className="min-w-0">
+                <label className="block text-xs font-semibold text-gray-500 mb-0.5">Sort by CV status</label>
                 <select
-                  value={linkStatusFilter}
-                  onChange={(e) => setLinkStatusFilter(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
+                  value={linkCvStatusSort}
+                  onChange={(e) => setLinkCvStatusSort(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
                 >
-                  <option value="all">All</option>
-                  <option value="unique">Unique</option>
-                  <option value="duplicate">Duplicate</option>
+                  <option value="default">Default (newest created first)</option>
+                  <option value="pipeline">Pipeline (empty → pending → created → failed)</option>
+                  <option value="pipelineDesc">Reverse pipeline</option>
+                  <option value="emptyFirst">Empty CV first</option>
+                  <option value="emptyLast">Empty CV last</option>
                 </select>
               </div>
-              <div className="w-full sm:w-36">
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Rows per page</label>
+              <div className="min-w-0">
+                <label className="block text-xs font-semibold text-gray-500 mb-0.5">Rows per page</label>
                 <select
                   value={linkPageSize}
                   onChange={(e) => setLinkPageSize(Number(e.target.value))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
+                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
                 >
                   {PAGE_SIZE_OPTIONS.map((n) => (
                     <option key={n} value={n}>{n} / page</option>
                   ))}
-                </select>
-              </div>
-              <div className="w-full sm:w-36">
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Sort by</label>
-                <select
-                  value={linkSortField}
-                  onChange={(e) => setLinkSortField(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
-                >
-                  <option value="profile">Profile</option>
-                  <option value="created">Created</option>
-                  <option value="updated">Updated</option>
-                </select>
-              </div>
-              <div className="w-full sm:w-32">
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Order</label>
-                <select
-                  value={linkSortOrder}
-                  onChange={(e) => setLinkSortOrder(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
-                >
-                  <option value="asc">Ascending</option>
-                  <option value="desc">Descending</option>
                 </select>
               </div>
             </div>
@@ -781,6 +858,15 @@ export default function Workspace() {
                     </span>
                     <button
                       type="button"
+                      disabled={deletingLinks || generatingLinks}
+                      onClick={() => generateCvsByLinkIds(selectedLinkIds)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-50"
+                      title="Generate CVs for selected links"
+                    >
+                      {generatingLinks ? 'Generating…' : 'Generate CV'}
+                    </button>
+                    <button
+                      type="button"
                       disabled={deletingLinks}
                       onClick={() => {
                         if (!window.confirm(`Delete ${selectedLinkIds.length} link(s)? This cannot be undone.`)) return;
@@ -796,11 +882,11 @@ export default function Workspace() {
               </div>
               {linkTableRows.length > 0 && (
                 <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm min-w-[980px] table-fixed">
+                  <div className="overflow-x-hidden">
+                    <table className="w-full text-sm table-fixed min-w-0">
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                          <th className="px-2 py-3 w-14 text-center">
+                          <th className="px-1.5 py-3 w-11 text-center">
                             <label className="inline-flex cursor-pointer items-center justify-center rounded-md focus-within:outline-none focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-1">
                               <input
                                 ref={linkSelectAllRef}
@@ -814,74 +900,161 @@ export default function Workspace() {
                               <LinkSelectIcon checked={allPageLinksSelected} indeterminate={somePageLinksSelected} />
                             </label>
                           </th>
-                          <th className="px-4 py-3 w-[22%]">Source file</th>
-                          <th className="px-4 py-3 w-[12%]">Profile</th>
-                          <th className="px-4 py-3 w-[34%]">URL</th>
-                          <th className="px-4 py-3 whitespace-nowrap w-[11%]">Created</th>
-                          <th className="px-4 py-3 whitespace-nowrap w-[11%]">Updated</th>
-                          <th className="px-4 py-3 w-[10%]">Status</th>
-                          <th className="px-4 py-3 w-[12%]">CV status</th>
+                          <th scope="col" className="px-4 py-3 w-[22%]">Source file</th>
+                          <th scope="col" className="px-4 py-3 w-[12%]">Profile</th>
+                          <th scope="col" className="px-4 py-3 w-[40%]">URL</th>
+                          <th scope="col" className="px-4 py-3 w-[11%] whitespace-nowrap">Created</th>
+                          <th scope="col" className="px-4 py-3 w-[11%] whitespace-nowrap">Updated</th>
+                          <th scope="col" className="px-4 py-3 w-[13%]">CV status</th>
+                          <th className="px-4 py-3 pl-4 pr-1 w-[9%]">JD</th>
+                          <th className="pl-0 pr-2 py-3 w-10" aria-label="Delete link" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {paginatedLinkRows.map((row) => (
-                          <tr key={row.key} className="hover:bg-gray-50">
-                            <td className="px-2 py-2 w-14 text-center align-middle">
-                              <label className="inline-flex cursor-pointer items-center justify-center rounded-md focus-within:outline-none focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-1">
-                                <input
-                                  type="checkbox"
-                                  className="sr-only"
-                                  checked={selectedLinkSet.has(String(row.key))}
-                                  onChange={() => toggleLinkSelected(row.key)}
-                                  disabled={deletingLinks}
-                                  aria-label={`Select link ${(row.url || '').slice(0, 48)}${(row.url || '').length > 48 ? '…' : ''}`}
-                                />
-                                <LinkSelectIcon checked={selectedLinkSet.has(String(row.key))} />
-                              </label>
-                            </td>
-                            <td className="px-4 py-3 text-gray-700 font-medium min-w-0" title={row.fileName}>
-                              <div className="truncate">
-                                {row.fileName}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-gray-600 text-xs min-w-0" title={row.profileId ? profileLabelById[String(row.profileId)] : ''}>
-                              <div className="truncate">
-                                {row.profileId ? (profileLabelById[String(row.profileId)] || '—') : '—'}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 min-w-0" title={row.url}>
-                              <a
-                                href={row.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="block text-accent hover:underline truncate text-xs"
-                              >
-                                {row.url}
-                              </a>
-                            </td>
-                            <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
-                              {formatLinkDate(row.createdAt)}
-                            </td>
-                            <td
-                              className={`px-4 py-3 text-xs whitespace-nowrap ${
-                                row.isDuplicate ? 'text-amber-900 font-medium' : 'text-gray-500'
-                              }`}
-                              title={
-                                row.isDuplicate
-                                  ? 'Legacy duplicate row (saved before merge behavior)'
-                                  : 'Last update time; Created shows the prior Updated time after a re-upload'
-                              }
-                            >
-                              {formatUpdatedCell(row)}
-                            </td>
-                            <td className="px-4 py-3">
-                              <DuplicateBadge isDuplicate={row.isDuplicate} />
-                            </td>
-                            <td className="px-4 py-3">
-                              <CvCreateBadge status={row.cvStatus} />
-                            </td>
-                          </tr>
-                        ))}
+                        {paginatedLinkRows.flatMap((row) => {
+                          const id = String(row.key);
+                          const isOpen = jdOpenLinkId === id;
+                          const jd = jdByLinkId[id] || '';
+
+                          return [
+                            (
+                              <tr key={row.key} className="hover:bg-gray-50">
+                                <td className="px-1.5 py-2 w-11 text-center align-middle">
+                                  <label className="inline-flex cursor-pointer items-center justify-center rounded-md focus-within:outline-none focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-1">
+                                    <input
+                                      type="checkbox"
+                                      className="sr-only"
+                                      checked={selectedLinkSet.has(String(row.key))}
+                                      onChange={() => toggleLinkSelected(row.key)}
+                                      disabled={deletingLinks}
+                                      aria-label={`Select link ${(row.url || '').slice(0, 48)}${(row.url || '').length > 48 ? '…' : ''}`}
+                                    />
+                                    <LinkSelectIcon checked={selectedLinkSet.has(String(row.key))} />
+                                  </label>
+                                </td>
+                                <td className="px-4 py-3 text-gray-700 font-medium min-w-0" title={row.fileName}>
+                                  <div className="truncate">
+                                    {row.fileName}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 min-w-0">
+                                  <select
+                                    value={profileRefToIdString(row.profileId)}
+                                    onChange={(e) => setProfileForLinkIds({ ids: [row.key], profileId: e.target.value })}
+                                    disabled={deletingLinks || generatingLinks || updatingProfileLinkIds.includes(String(row.key))}
+                                    className="w-full max-w-[170px] cursor-pointer appearance-none border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-accent [&::-ms-expand]:hidden"
+                                    title="Set profile for this link"
+                                  >
+                                    <option value="">No profile</option>
+                                    {profiles.map((p) => (
+                                      <option key={p._id} value={String(p._id)}>{p.label}</option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td className="px-4 py-3 min-w-0" title={row.url}>
+                                  <a
+                                    href={row.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block text-accent hover:underline truncate text-xs"
+                                  >
+                                    {row.url}
+                                  </a>
+                                </td>
+                                <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                                  {formatLinkDate(row.createdAt)}
+                                </td>
+                                <td
+                                  className={`px-4 py-3 text-xs whitespace-nowrap ${
+                                    row.isDuplicate ? 'text-amber-900 font-medium' : 'text-gray-500'
+                                  }`}
+                                  title={
+                                    row.isDuplicate
+                                      ? 'Last time this URL was uploaded again (same normalized link)'
+                                      : 'Shown only for duplicate rows (same URL saved more than once)'
+                                  }
+                                >
+                                  {formatUpdatedCell(row)}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <CvCreateBadge status={row.cvStatus} />
+                                </td>
+                                <td className="px-4 py-3 pl-4 pr-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleJdForRow(row)}
+                                    disabled={deletingLinks}
+                                    className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                    title="Add job description for this link"
+                                  >
+                                    {isOpen ? 'Hide' : 'JD'}
+                                  </button>
+                                </td>
+                                <td className="py-3 pl-0 pr-2">
+                                  <button
+                                    type="button"
+                                    disabled={deletingLinks || generatingLinks}
+                                    onClick={() => {
+                                      if (!window.confirm('Delete this link? This cannot be undone.')) return;
+                                      removeLinksByIds([row.key]);
+                                    }}
+                                    className="inline-flex items-center justify-center rounded-md p-1 text-red-600 hover:bg-red-50 hover:text-red-800 disabled:opacity-50"
+                                    title="Delete this link"
+                                    aria-label="Delete this link"
+                                  >
+                                    <TrashIcon className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ),
+                            isOpen ? (
+                              <tr key={`${row.key}-preview`} className="bg-white">
+                                <td className="px-4 py-3" colSpan={9}>
+                                  <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+                                    <div className="space-y-2">
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Job description</p>
+                                          <p className="text-xs text-gray-500 truncate" title={row.url}>
+                                            {row.url}
+                                          </p>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setJdByLinkId((prev) => ({ ...prev, [id]: '' }));
+                                            queueSaveJd({ id, jobDescription: '' });
+                                          }}
+                                          className="shrink-0 text-xs font-semibold text-gray-600 hover:text-gray-800 rounded-lg px-2 py-1 hover:bg-white/70 border border-transparent hover:border-gray-200"
+                                          title="Clear JD"
+                                        >
+                                          Clear
+                                        </button>
+                                      </div>
+                                      <textarea
+                                        value={jd}
+                                        onChange={(e) => {
+                                          const v = e.target.value;
+                                          setJdByLinkId((prev) => ({ ...prev, [id]: v }));
+                                          queueSaveJd({ id, jobDescription: v });
+                                        }}
+                                        placeholder="Paste or type the job description here…"
+                                        className="w-full min-h-[140px] border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-accent"
+                                      />
+                                      <p className="text-xs text-gray-500">
+                                        {savingJdLinkIds.includes(String(id))
+                                          ? 'Saving…'
+                                          : jdSaveErrorByLinkId[String(id)]
+                                            ? `Save failed: ${jdSaveErrorByLinkId[String(id)]}`
+                                            : 'Saved to your account.'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : null,
+                          ].filter(Boolean);
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -896,7 +1069,7 @@ export default function Workspace() {
                             {Math.min(linkPage * linkPageSize, linkTableRows.length)}
                           </strong>
                           {' '}of <strong className="text-primary">{linkTableRows.length}</strong> link{linkTableRows.length !== 1 ? 's' : ''}
-                          {(linkSearch.trim() || linkProfileFilter !== 'all' || linkStatusFilter !== 'all') ? ' (filtered)' : ''}
+                          {(linkSearch.trim() || linkProfileFilter !== 'all') ? ' (filtered)' : ''}
                           {' '}· {linkPageSize} / page
                         </>
                       ) : null}
@@ -914,181 +1087,184 @@ export default function Workspace() {
           )}
         </div>
 
-        <div className="border-t border-gray-100 pt-8 space-y-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-primary">Saved CVs</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Search, filter, and sort. Click a row to open the CV.</p>
-          </div>
-          <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full lg:w-auto">
-            <div className="flex-1 min-w-[160px]">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Search</label>
-              <input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Role, company, job type…"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-              />
+        <div className="border-t border-gray-100 pt-8 space-y-4">
+          <div className="space-y-3">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-primary">Saved CVs</h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Search, filter, and sort. Click a row or Open to view the CV in a new tab.
+              </p>
             </div>
-            <div className="min-w-[140px]">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Status</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
-              >
-                <option value="all">All statuses</option>
-                {ALL_STATUSES.map((s) => (
-                  <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="min-w-[160px]">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Profile</label>
-              <select
-                value={tableProfileFilter}
-                onChange={(e) => setTableProfileFilter(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
-              >
-                <option value="all">All profiles</option>
-                {profiles.map((p) => (
-                  <option key={p._id} value={String(p._id)}>{p.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="min-w-[100px] w-full sm:w-36">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Rows per page</label>
-              <select
-                value={cvPageSize}
-                onChange={(e) => setCvPageSize(Number(e.target.value))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
-              >
-                {PAGE_SIZE_OPTIONS.map((n) => (
-                  <option key={n} value={n}>{n} / page</option>
-                ))}
-              </select>
-            </div>
-            <div className="w-full sm:w-36">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Sort by</label>
-              <select
-                value={cvSortField}
-                onChange={(e) => setCvSortField(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
-              >
-                <option value="profile">Profile</option>
-                <option value="jobType">Job type</option>
-                <option value="created">Created</option>
-                <option value="updated">Updated</option>
-              </select>
-            </div>
-            <div className="w-full sm:w-32">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Order</label>
-              <select
-                value={cvSortOrder}
-                onChange={(e) => setCvSortOrder(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
-              >
-                <option value="asc">Ascending</option>
-                <option value="desc">Descending</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {loadingCvs ? (
-          <p className="text-gray-400 text-sm py-8 text-center">Loading…</p>
-        ) : cvList.length === 0 ? (
-          <div className="py-12 text-center text-gray-400 text-sm">
-            <p>No CVs yet.</p>
-            <Link to="/create" className="text-accent hover:underline mt-2 inline-block">Create your first CV →</Link>
-          </div>
-        ) : (
-          <>
-            <p className="text-xs text-gray-500">
-              {sortedFilteredCvs.length > 0 ? (
-                <>
-                  Rows <strong className="text-primary">{(cvPage - 1) * cvPageSize + 1}–{Math.min(cvPage * cvPageSize, sortedFilteredCvs.length)}</strong>
-                  {' '}of <strong className="text-primary">{sortedFilteredCvs.length}</strong> matching
-                  {' '}({cvList.length} CV{cvList.length !== 1 ? 's' : ''} total){' '}· {cvPageSize} per page
-                  {statusFilter !== 'all' && (
-                    <span> · status = {STATUS_CONFIG[statusFilter]?.label}</span>
-                  )}
-                </>
-              ) : (
-                <>
-                  <strong className="text-primary">0</strong> of {cvList.length} CV{cvList.length !== 1 ? 's' : ''} match filters
-                  {statusFilter !== 'all' && (
-                    <span> · status = {STATUS_CONFIG[statusFilter]?.label}</span>
-                  )}
-                </>
-              )}
-            </p>
-            {sortedFilteredCvs.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-10">No CVs match your search or filters.</p>
-            ) : (
-              <div className="border border-gray-200 rounded-xl overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm min-w-[640px]">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        <th className="px-4 py-3">Role</th>
-                        <th className="px-4 py-3">Company</th>
-                        <th className="px-4 py-3">Type</th>
-                        <th className="px-4 py-3">Profile</th>
-                        <th className="px-4 py-3">Status</th>
-                        <th className="px-4 py-3 whitespace-nowrap">Created</th>
-                        <th className="px-4 py-3 w-24"> </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {paginatedCvs.map((cv) => {
-                        const pid = String(cv.profileId ?? '');
-                        const st = cv.application_status || 'saved';
-                        return (
-                          <tr
-                            key={cv._id}
-                            onClick={() => navigate(`/cv/${cv._id}`)}
-                            className="hover:bg-gray-50 cursor-pointer transition"
-                          >
-                            <td className="px-4 py-3 font-medium text-primary">{cv.role_title || '—'}</td>
-                            <td className="px-4 py-3 text-gray-700">{cv.company_name || '—'}</td>
-                            <td className="px-4 py-3 text-gray-600">{cv.job_type || '—'}</td>
-                            <td className="px-4 py-3 text-gray-600">{profileLabelById[pid] || '—'}</td>
-                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                              <StatusBadge status={st} />
-                            </td>
-                            <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                              {cv.createdAt
-                                ? new Date(cv.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-                                : '—'}
-                            </td>
-                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                              <Link
-                                to={`/cv/${cv._id}`}
-                                className="text-xs font-medium text-accent hover:underline"
-                              >
-                                Open
-                              </Link>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="px-3 pb-3 bg-gray-50/80 border-t border-gray-100">
-                  <Pagination
-                    page={cvPage}
-                    total={sortedFilteredCvs.length}
-                    pageSize={cvPageSize}
-                    onChange={setCvPage}
-                  />
-                </div>
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full">
+              <div className="w-full sm:flex-1 sm:min-w-[160px]">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Search</label>
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Role, company, job type, work mode…"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                />
               </div>
-            )}
-          </>
-        )}
+              <div className="w-full sm:w-40">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
+                >
+                  <option value="all">All statuses</option>
+                  {ALL_STATUSES.map((s) => (
+                    <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-full sm:w-40">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Profile</label>
+                <select
+                  value={tableProfileFilter}
+                  onChange={(e) => setTableProfileFilter(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
+                >
+                  <option value="all">All profiles</option>
+                  {profiles.map((p) => (
+                    <option key={p._id} value={String(p._id)}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-full sm:w-36">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Rows per page</label>
+                <select
+                  value={cvPageSize}
+                  onChange={(e) => setCvPageSize(Number(e.target.value))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
+                >
+                  {PAGE_SIZE_OPTIONS.map((n) => (
+                    <option key={n} value={n}>{n} / page</option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-full sm:w-36">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Sort by</label>
+                <select
+                  value={cvSortField}
+                  onChange={(e) => setCvSortField(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
+                >
+                  <option value="profile">Profile</option>
+                  <option value="jobType">Job type</option>
+                  <option value="created">Created</option>
+                  <option value="updated">Updated</option>
+                </select>
+              </div>
+              <div className="w-full sm:w-32">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Order</label>
+                <select
+                  value={cvSortOrder}
+                  onChange={(e) => setCvSortOrder(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
+                >
+                  <option value="asc">Ascending</option>
+                  <option value="desc">Descending</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {loadingCvs ? (
+            <p className="text-gray-400 text-sm py-8 text-center">Loading…</p>
+          ) : cvList.length === 0 ? (
+            <div className="py-12 text-center text-gray-400 text-sm">
+              <p>No CVs yet.</p>
+              <Link to="/create" className="text-accent hover:underline mt-2 inline-block">Create your first CV →</Link>
+            </div>
+          ) : sortedFilteredCvs.length === 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs text-gray-500">
+                <strong className="text-primary">0</strong> of {cvList.length} CV{cvList.length !== 1 ? 's' : ''} match filters
+                {(search.trim() || statusFilter !== 'all' || tableProfileFilter !== 'all') ? ' (filtered)' : ''}
+                {statusFilter !== 'all' && (
+                  <span> · status = {STATUS_CONFIG[statusFilter]?.label}</span>
+                )}
+              </p>
+              <p className="text-sm text-gray-400 text-center py-10 border border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+                No CVs match your search or filters.
+              </p>
+            </div>
+          ) : (
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[720px]">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      <th className="px-4 py-3">Role</th>
+                      <th className="px-4 py-3">Company</th>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3 whitespace-nowrap">Work mode</th>
+                      <th className="px-4 py-3">Profile</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 whitespace-nowrap">Created</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {paginatedCvs.map((cv) => {
+                      const st = cv.application_status || 'saved';
+                      const profileLabel = profileRefToLabel(cv.profileId, profileLabelById) || '—';
+                      return (
+                        <tr
+                          key={cv._id}
+                          onClick={() => openCvInNewWindow(cv._id)}
+                          className="hover:bg-gray-50 cursor-pointer transition"
+                        >
+                          <td className="px-4 py-3 font-medium text-primary">{cv.role_title || '—'}</td>
+                          <td className="px-4 py-3 text-gray-700">{cv.company_name || '—'}</td>
+                          <td className="px-4 py-3 text-gray-600">{cv.job_type || '—'}</td>
+                          <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                            {cv.remote_status && cv.remote_status !== 'Unspecified' ? cv.remote_status : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{profileLabel}</td>
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <StatusBadge status={st} />
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                            {cv.createdAt
+                              ? new Date(cv.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                              : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="px-3 pb-3 bg-gray-50/80 border-t border-gray-100 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-gray-500">
+                  {sortedFilteredCvs.length > 0 ? (
+                    <>
+                      Showing{' '}
+                      <strong className="text-primary">
+                        {(cvPage - 1) * cvPageSize + 1}
+                        –
+                        {Math.min(cvPage * cvPageSize, sortedFilteredCvs.length)}
+                      </strong>
+                      {' '}of <strong className="text-primary">{sortedFilteredCvs.length}</strong> CV{sortedFilteredCvs.length !== 1 ? 's' : ''}
+                      {(search.trim() || statusFilter !== 'all' || tableProfileFilter !== 'all') ? ' (filtered)' : ''}
+                      {' '}· {cvList.length} total · {cvPageSize} / page
+                      {statusFilter !== 'all' && (
+                        <span> · status = {STATUS_CONFIG[statusFilter]?.label}</span>
+                      )}
+                    </>
+                  ) : null}
+                </p>
+                <Pagination
+                  page={cvPage}
+                  total={sortedFilteredCvs.length}
+                  pageSize={cvPageSize}
+                  onChange={setCvPage}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

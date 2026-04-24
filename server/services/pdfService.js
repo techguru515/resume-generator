@@ -15,6 +15,7 @@ function buildMetadata(cvData, profile) {
     keywords: [
       cvData.role_title,
       cvData.developer_title,
+      cvData.remote_status,
       ...allSkills,
       ...roles,
       ...companies,

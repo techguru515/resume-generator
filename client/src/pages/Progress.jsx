@@ -40,7 +40,13 @@ function CVCard({ cv, isDragging, navigate }) {
     >
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-primary text-xs leading-snug truncate">{cv.role_title}</p>
-        <p className="text-xs text-gray-500 truncate">{cv.company_name} · {cv.job_type}</p>
+        <p className="text-xs text-gray-500 truncate">
+          {[
+            cv.company_name,
+            cv.job_type,
+            cv.remote_status && cv.remote_status !== 'Unspecified' ? cv.remote_status : null,
+          ].filter(Boolean).join(' · ')}
+        </p>
         {cv.salary_range && <p className="text-xs text-gray-400">{cv.salary_range}</p>}
         <p className="text-xs text-gray-400 mt-0.5">
           {new Date(cv.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
