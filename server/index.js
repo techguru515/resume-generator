@@ -12,6 +12,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/cv', require('./routes/cv'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/profile', require('./routes/profile'));
+app.use('/api/workspace-links', require('./routes/workspaceLinks'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 

@@ -2,6 +2,7 @@ const CV = require('../models/CV');
 const Profile = require('../models/Profile');
 const { generateDocx } = require('../services/docxService');
 const { generatePdf } = require('../services/pdfService');
+const { generateCvJsonWithOpenAI } = require('../services/openaiCvService');
 
 async function getProfileById(profileId) {
   const profile = await Profile.findById(profileId);
@@ -14,6 +15,34 @@ function ownerFilter(req) {
   if (req.user.role === 'admin') return {};
   return { userId: req.user._id };
 }
+
+// POST /api/cv/generate — OpenAI: extract job facts from unstructured text, then draft CV JSON (does not persist)
+exports.generateWithAi = async (req, res) => {
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(503).json({
+        error: 'OpenAI is not configured. Add OPENAI_API_KEY to server/.env and restart.',
+      });
+    }
+    const { job_description, job_link, profileId } = req.body || {};
+    if (!profileId) return res.status(400).json({ error: 'profileId is required' });
+    const jd = job_description != null ? String(job_description).trim() : '';
+    if (!jd) return res.status(400).json({ error: 'job_description is required' });
+
+    const profile = await Profile.findOne({ _id: profileId, userId: req.user._id });
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+    const payload = await generateCvJsonWithOpenAI({
+      jobDescription: jd,
+      jobLink: job_link != null ? String(job_link).trim() : '',
+      profile: profile.toObject(),
+    });
+    res.json(payload);
+  } catch (err) {
+    console.error('generateWithAi:', err.message);
+    res.status(500).json({ error: err.message || 'AI generation failed' });
+  }
+};
 
 // POST /api/cv
 exports.save = async (req, res) => {
@@ -67,17 +96,17 @@ exports.update = async (req, res) => {
   }
 };
 
-// PATCH /api/cv/:id/status
+// POST or PATCH /api/cv/:id/status  { application_status }
 exports.updateStatus = async (req, res) => {
   try {
-    const { application_status } = req.body;
+    const { application_status } = req.body || {};
     const allowed = ['saved', 'applied', 'interview', 'offer', 'rejected'];
     if (!allowed.includes(application_status))
       return res.status(400).json({ error: 'Invalid status' });
     const cv = await CV.findOneAndUpdate(
       { _id: req.params.id, ...ownerFilter(req) },
       { application_status },
-      { new: true }
+      { new: true, runValidators: true }
     );
     if (!cv) return res.status(404).json({ error: 'CV not found' });
     res.json({ _id: cv._id, application_status: cv.application_status });

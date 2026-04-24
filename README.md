@@ -11,7 +11,7 @@ A full-stack CV management platform built with the **MERN stack** that allows us
 * 🔐 JWT authentication (login/register)
 * ⛔ Access gated until admin approval
 * 👥 Multiple profiles per user (contact, education, certifications)
-* 🧠 Paste structured CV JSON (no AI dependency)
+* 🧠 Draft CVs with OpenAI from the job description (server `OPENAI_API_KEY`)
 * 📝 Create CV with profile selection
 * 👀 Live CV preview (fully merged with profile data)
 * 📥 Download CV as **PDF** and **DOCX**
@@ -58,6 +58,7 @@ A full-stack CV management platform built with the **MERN stack** that allows us
 * bcryptjs (password hashing)
 * Puppeteer (PDF generation)
 * docx (DOCX generation)
+* OpenAI API (draft CV content from job description + profile)
 
 ### Frontend
 
@@ -105,6 +106,11 @@ JWT_SECRET=your_super_secret_key
 
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=secure_password
+
+# OpenAI — CV drafting (required): extract job facts, then generate CV JSON
+OPENAI_API_KEY=sk-...
+# OPENAI_MODEL=gpt-4o-mini
+# OPENAI_MODEL_EXTRACT=gpt-4o-mini
 ```
 
 ---
@@ -177,10 +183,11 @@ npm run dev
 ## 📄 CV Generation Flow
 
 1. User selects a profile
-2. Pastes structured CV JSON
-3. Preview is generated
-4. Save CV → stored in MongoDB
-5. Download:
+2. Pastes unstructured job text and runs **Generate draft** (`OPENAI_API_KEY` on the server)
+3. Backend calls OpenAI **twice**: (1) normalize the posting into structured job fields, (2) generate CV JSON from that structure plus the profile
+4. Preview is generated
+5. Save CV → stored in MongoDB
+6. Download:
 
    * DOCX → `docx` library
    * PDF → Puppeteer
@@ -212,7 +219,7 @@ application_status:
 
 ## 🧠 Key Design Decisions
 
-* ❌ No AI dependency → user provides JSON
+* Two-step OpenAI pipeline (extract structured job info from messy text, then write CV fields); no manual JSON in the UI
 * ✅ Profile-based CV composition
 * ✅ Admin-controlled access (approval flow)
 * ✅ Separation of concerns (client/admin views)
@@ -225,7 +232,7 @@ application_status:
 
 * Export multiple CVs as ZIP
 * Email integration (apply directly)
-* AI-assisted CV suggestions (optional)
+* In-app editing of draft fields without re-calling the API
 * Public CV share link
 * Mobile optimization
 

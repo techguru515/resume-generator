@@ -10,8 +10,8 @@ export default function CVPreview({ cvData, profile }) {
     : [];
 
   // Build experience rows: company/role/date from profile.workExperiences,
-  // bullets from cv JSON experiences (experience1, experience2, …)
-  // If profile has no workExperiences, fall back to role/company/date keys from the CV JSON itself.
+  // bullets from cvData.experiences (experience1, experience2, …)
+  // If profile has no workExperiences, fall back to role/company/date keys on cvData.experiences.
   const workRows = (() => {
     const profileJobs = profile?.workExperiences || [];
     if (profileJobs.length > 0) {
@@ -24,7 +24,7 @@ export default function CVPreview({ cvData, profile }) {
         bullets: experiences?.[`experience${i + 1}`] || [],
       }));
     }
-    // Fallback: old-style keys in JSON
+    // Fallback: roleN / companyN / dateN on cvData
     return [1, 2, 3].map((i) => ({
       role: experiences?.[`role${i}`],
       company: experiences?.[`company${i}`],

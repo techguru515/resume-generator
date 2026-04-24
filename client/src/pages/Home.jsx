@@ -1,26 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { saveCV, listCVs, deleteCV, updateCVStatus, listProfiles } from '../api.js';
-import CVPreview from '../components/CVPreview.jsx';
+import { listCVs, deleteCV, updateCVStatus, listProfiles } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
-
-const PLACEHOLDER = JSON.stringify(
-  {
-    role_title: 'Senior Backend Engineer',
-    developer_title: 'Senior Backend Engineer (GenAI Platform)',
-    company_name: 'OLX',
-    job_type: 'Permanent',
-    salary_range: '',
-    summary: '...',
-    skills: { programming_languages: ['Python', 'Go'] },
-    experiences: {
-      role1: 'Senior Backend Engineer', experience1: ['...'],
-      role2: 'Backend Engineer', experience2: ['...'],
-      role3: 'Junior Backend Developer', experience3: ['...'],
-    },
-  },
-  null, 2
-);
 
 const STATUS_CONFIG = {
   saved:     { label: 'Saved',     color: 'bg-gray-100 text-gray-600',    dot: 'bg-gray-400' },
@@ -39,122 +20,6 @@ function StatusBadge({ status }) {
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
       {cfg.label}
     </span>
-  );
-}
-
-// New CV form shown as a modal-like panel
-function NewCVForm({ profiles, onSave, onCancel }) {
-  const [jsonInput, setJsonInput] = useState('');
-  const [jobLink, setJobLink] = useState('');
-  const [parseError, setParseError] = useState('');
-  const [preview, setPreview] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [selectedProfileId, setSelectedProfileId] = useState(profiles[0]?._id || '');
-  const [selectedProfile, setSelectedProfile] = useState(profiles[0] || null);
-
-  function handleParse(e) {
-    e.preventDefault();
-    setParseError('');
-    try { setPreview(JSON.parse(jsonInput)); }
-    catch (err) { setParseError('Invalid JSON: ' + err.message); }
-  }
-
-  async function handleSave() {
-    if (!preview || !selectedProfileId) return;
-    setSaving(true);
-    try {
-      await saveCV({ ...preview, profileId: selectedProfileId, job_link: jobLink });
-      onSave();
-    } catch (err) {
-      setParseError(err.response?.data?.error || err.message);
-    } finally { setSaving(false); }
-  }
-
-  return (
-    <div className="bg-white rounded-2xl shadow-lg border border-blue-100 p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold text-primary">New CV</h3>
-        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 text-sm">✕ Cancel</button>
-      </div>
-
-      {/* Job link */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Job Link <span className="text-gray-400 font-normal">(paste the job posting URL)</span>
-        </label>
-        <input
-          type="url"
-          value={jobLink}
-          onChange={(e) => setJobLink(e.target.value)}
-          placeholder="https://linkedin.com/jobs/..."
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-        />
-      </div>
-
-      {/* Profile selector */}
-      {profiles.length > 0 && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Use Profile</label>
-          <select
-            value={selectedProfileId}
-            onChange={(e) => {
-              setSelectedProfileId(e.target.value);
-              setSelectedProfile(profiles.find((p) => p._id === e.target.value) || null);
-            }}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-          >
-            {profiles.map((p) => (
-              <option key={p._id} value={p._id}>{p.label} — {p.name}</option>
-            ))}
-          </select>
-        </div>
-      )}
-      {profiles.length === 0 && (
-        <p className="text-yellow-600 text-sm">No profiles yet. <a href="/profile" className="underline">Create one</a> first.</p>
-      )}
-
-      {/* JSON input */}
-      <form onSubmit={handleParse} className="space-y-3">
-        <textarea
-          value={jsonInput}
-          onChange={(e) => { setJsonInput(e.target.value); setParseError(''); setPreview(null); }}
-          placeholder={PLACEHOLDER}
-          rows={10}
-          spellCheck={false}
-          className="w-full border border-gray-300 rounded-lg p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-accent resize-y"
-        />
-        {parseError && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">{parseError}</div>
-        )}
-        <div className="flex gap-3">
-          <button
-            type="submit"
-            disabled={!jsonInput.trim()}
-            className="bg-accent text-white px-5 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition text-sm"
-          >
-            Preview
-          </button>
-          {preview && (
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !selectedProfileId}
-              className="bg-green-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 transition text-sm"
-            >
-              {saving ? 'Saving…' : 'Save CV'}
-            </button>
-          )}
-        </div>
-      </form>
-
-      {/* Preview */}
-      {preview && (
-        <div className="border-t pt-4">
-          <p className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-3">Full Preview</p>
-          <CVPreview cvData={preview} profile={selectedProfile} />
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -271,8 +136,6 @@ export default function Home() {
   const [profiles, setProfiles] = useState([]);
   const [cvList, setCvList] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-
   useEffect(() => {
     if (user?.isApproved || user?.role === 'admin') {
       Promise.all([listProfiles(), listCVs()])
@@ -299,7 +162,10 @@ export default function Home() {
   async function handleStatusChange(cvId, status) {
     try {
       const updated = await updateCVStatus(cvId, status);
-      setCvList((prev) => prev.map((c) => c._id === cvId ? { ...c, application_status: updated.application_status } : c));
+      const sid = String(cvId);
+      setCvList((prev) =>
+        prev.map((c) => (String(c._id) === sid ? { ...c, application_status: updated.application_status } : c))
+      );
     } catch (err) { alert(err.response?.data?.error || err.message); }
   }
 
@@ -309,12 +175,6 @@ export default function Home() {
       await deleteCV(cvId);
       setCvList((prev) => prev.filter((c) => c._id !== cvId));
     } catch (err) { alert(err.response?.data?.error || err.message); }
-  }
-
-  async function handleSaved() {
-    setShowForm(false);
-    const [p, c] = await Promise.all([listProfiles(), listCVs()]);
-    setProfiles(p); setCvList(c);
   }
 
   // Overall stats
@@ -354,24 +214,16 @@ export default function Home() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-primary">My Dashboard</h2>
         <button
-          onClick={() => setShowForm((v) => !v)}
+          type="button"
+          onClick={() => navigate('/create')}
           className="bg-accent text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 transition font-medium"
         >
-          {showForm ? '✕ Cancel' : '+ New CV'}
+          + New CV
         </button>
       </div>
 
-      {/* New CV form */}
-      {showForm && (
-        <NewCVForm
-          profiles={profiles}
-          onSave={handleSaved}
-          onCancel={() => setShowForm(false)}
-        />
-      )}
-
       {/* Profile cards */}
-      {profiles.length === 0 && !showForm ? (
+      {profiles.length === 0 ? (
         <div className="bg-white rounded-2xl shadow p-10 text-center text-gray-400">
           <p className="mb-2 text-sm">No profiles yet.</p>
           <a href="/profile" className="text-accent hover:underline text-sm">Create your first profile →</a>

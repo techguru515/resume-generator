@@ -22,7 +22,7 @@ const STATUS_CONFIG = {
 const ALL_STATUSES = Object.keys(STATUS_CONFIG);
 
 function CVCard({ cv, isDragging, navigate, profileLabel }) {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: cv._id });
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: String(cv._id) });
   const style = transform
     ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 50, opacity: 0.85 }
     : undefined;
@@ -105,7 +105,7 @@ function KanbanColumn({ status, cvs, activeId, navigate, profileMap }) {
             <CVCard
               key={cv._id}
               cv={cv}
-              isDragging={activeId === cv._id}
+              isDragging={String(activeId) === String(cv._id)}
               navigate={navigate}
               profileLabel={profileMap[cv.profileId?.toString()]}
             />
@@ -166,7 +166,7 @@ export default function AdminProgress() {
     return acc;
   }, {});
 
-  const activeCv = activeId ? cvList.find((c) => c._id === activeId) : null;
+  const activeCv = activeId ? cvList.find((c) => String(c._id) === String(activeId)) : null;
   const selectedClient = clients.find((c) => c._id === selectedClientId);
 
   function handleDragStart({ active }) { setActiveId(active.id); }
@@ -176,15 +176,16 @@ export default function AdminProgress() {
     if (!over || active.id === over.id) return;
     const newStatus = over.id;
     if (!ALL_STATUSES.includes(newStatus)) return;
-    const cv = cvList.find((c) => c._id === active.id);
+    const aid = String(active.id);
+    const cv = cvList.find((c) => String(c._id) === aid);
     if (!cv || (cv.application_status || 'saved') === newStatus) return;
 
-    setCvList((prev) => prev.map((c) => c._id === active.id ? { ...c, application_status: newStatus } : c));
+    setCvList((prev) => prev.map((c) => (String(c._id) === aid ? { ...c, application_status: newStatus } : c)));
 
     try {
-      await updateCVStatus(active.id, newStatus);
+      await updateCVStatus(aid, newStatus);
     } catch (err) {
-      setCvList((prev) => prev.map((c) => c._id === active.id ? { ...c, application_status: cv.application_status || 'saved' } : c));
+      setCvList((prev) => prev.map((c) => (String(c._id) === aid ? { ...c, application_status: cv.application_status || 'saved' } : c)));
       alert(err.response?.data?.error || err.message);
     }
   }

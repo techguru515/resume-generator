@@ -3,6 +3,7 @@ import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import CreateCV from './pages/CreateCV.jsx';
+import Workspace from './pages/Workspace.jsx';
 import Progress from './pages/Progress.jsx';
 import CVDetail from './pages/CVDetail.jsx';
 import ProfilePage from './pages/ProfilePage.jsx';
@@ -143,6 +144,7 @@ function Layout() {
             <>
               <NavLink to="/" end className={navLink}>Dashboard</NavLink>
               <NavLink to="/create" className={navLink}>Create CV</NavLink>
+              <NavLink to="/workspace" className={navLink}>Workspace</NavLink>
               <NavLink to="/progress" className={navLink}>Progress</NavLink>
             </>
           )}
@@ -158,6 +160,7 @@ function Layout() {
           {/* Client routes */}
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/create" element={<ProtectedRoute><CreateCV /></ProtectedRoute>} />
+          <Route path="/workspace" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
           <Route path="/progress" element={<ProtectedRoute><Progress /></ProtectedRoute>} />
 
           {/* Shared */}

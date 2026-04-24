@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminListCVs } from '../api.js';
+import Pagination from '../components/Pagination.jsx';
 
 const STATUS_CONFIG = {
   saved:     { label: 'Saved',     color: 'bg-gray-100 text-gray-600' },
@@ -11,36 +12,6 @@ const STATUS_CONFIG = {
 };
 
 const PAGE_SIZE = 10;
-
-function Pagination({ page, total, pageSize, onChange }) {
-  const totalPages = Math.ceil(total / pageSize);
-  if (totalPages <= 1) return null;
-  return (
-    <div className="flex items-center justify-between pt-3 border-t mt-2">
-      <p className="text-xs text-gray-400">
-        Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
-      </p>
-      <div className="flex items-center gap-1">
-        <button disabled={page === 1} onClick={() => onChange(page - 1)}
-          className="px-2 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition">
-          ‹ Prev
-        </button>
-        {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-          <button key={p} onClick={() => onChange(p)}
-            className={`px-2.5 py-1 text-xs rounded border transition ${
-              p === page ? 'bg-accent text-white border-accent' : 'border-gray-200 hover:bg-gray-50'
-            }`}>
-            {p}
-          </button>
-        ))}
-        <button disabled={page === totalPages} onClick={() => onChange(page + 1)}
-          className="px-2 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition">
-          Next ›
-        </button>
-      </div>
-    </div>
-  );
-}
 
 export default function AdminCVs() {
   const [cvs, setCvs] = useState([]);
@@ -159,7 +130,7 @@ export default function AdminCVs() {
               </tbody>
             </table>
           </div>
-          <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
+          <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} showSummary />
         </div>
       </div>
     </div>

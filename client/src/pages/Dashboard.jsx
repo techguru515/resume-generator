@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
+import Pagination from '../components/Pagination.jsx';
 
 const STATUS_CONFIG = {
   saved:     { label: 'Saved',     color: 'bg-gray-100 text-gray-600',    dot: 'bg-gray-400' },
@@ -28,40 +29,6 @@ function StatusBadge({ status }) {
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
       {cfg.label}
     </span>
-  );
-}
-
-function Pagination({ page, total, pageSize, onChange }) {
-  const totalPages = Math.ceil(total / pageSize);
-  if (totalPages <= 1) return null;
-  return (
-    <div className="flex items-center justify-end gap-1 pt-2">
-      <button
-        disabled={page === 1}
-        onClick={() => onChange(page - 1)}
-        className="px-2 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition"
-      >
-        ‹ Prev
-      </button>
-      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-        <button
-          key={p}
-          onClick={() => onChange(p)}
-          className={`px-2.5 py-1 text-xs rounded border transition ${
-            p === page ? 'bg-accent text-white border-accent' : 'border-gray-200 hover:bg-gray-50'
-          }`}
-        >
-          {p}
-        </button>
-      ))}
-      <button
-        disabled={page === totalPages}
-        onClick={() => onChange(page + 1)}
-        className="px-2 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50 transition"
-      >
-        Next ›
-      </button>
-    </div>
   );
 }
 
@@ -204,7 +171,10 @@ export default function Dashboard() {
   async function handleStatusChange(cvId, status) {
     try {
       const updated = await updateCVStatus(cvId, status);
-      setCvList((prev) => prev.map((c) => c._id === cvId ? { ...c, application_status: updated.application_status } : c));
+      const sid = String(cvId);
+      setCvList((prev) =>
+        prev.map((c) => (String(c._id) === sid ? { ...c, application_status: updated.application_status } : c))
+      );
     } catch (err) { alert(err.response?.data?.error || err.message); }
   }
 
