@@ -29,7 +29,7 @@ export default function AdminCVs() {
 
   const filtered = cvs.filter((cv) => {
     const q = search.toLowerCase();
-    const matchSearch = !q || cv.role_title?.toLowerCase().includes(q) || cv.company_name?.toLowerCase().includes(q) || cv.userId?.name?.toLowerCase().includes(q);
+    const matchSearch = !q || cv.role_title?.toLowerCase().includes(q) || cv.company_name?.toLowerCase().includes(q) || cv.remote_status?.toLowerCase().includes(q) || cv.userId?.name?.toLowerCase().includes(q);
     const matchStatus = !filterStatus || (cv.application_status || 'saved') === filterStatus;
     return matchSearch && matchStatus;
   });
@@ -74,6 +74,7 @@ export default function AdminCVs() {
                   <th className="pb-2 font-medium pr-4">Company</th>
                   <th className="pb-2 font-medium pr-4">Client</th>
                   <th className="pb-2 font-medium pr-4">Job Type</th>
+                  <th className="pb-2 font-medium pr-4">Work mode</th>
                   <th className="pb-2 font-medium pr-4">App. Status</th>
                   <th className="pb-2 font-medium pr-4">Job Link</th>
                   <th className="pb-2 font-medium pr-4">Date</th>
@@ -82,7 +83,7 @@ export default function AdminCVs() {
               </thead>
               <tbody className="divide-y">
                 {paged.length === 0 && (
-                  <tr><td colSpan={8} className="py-8 text-center text-gray-400">No CVs found.</td></tr>
+                  <tr><td colSpan={9} className="py-8 text-center text-gray-400">No CVs found.</td></tr>
                 )}
                 {paged.map((cv) => {
                   const appCfg = STATUS_CONFIG[cv.application_status || 'saved'];
@@ -100,6 +101,9 @@ export default function AdminCVs() {
                         }`}>
                           {cv.job_type}
                         </span>
+                      </td>
+                      <td className="py-2.5 pr-4 text-gray-600 text-xs whitespace-nowrap">
+                        {cv.remote_status && cv.remote_status !== 'Unspecified' ? cv.remote_status : '—'}
                       </td>
                       <td className="py-2.5 pr-4">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${appCfg.color}`}>

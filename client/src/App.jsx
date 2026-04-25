@@ -143,7 +143,7 @@ function Layout() {
           {user?.role === 'client' && (
             <>
               <NavLink to="/" end className={navLink}>Dashboard</NavLink>
-              <NavLink to="/create" className={navLink}>Create CV</NavLink>
+              <NavLink to="/profile" className={navLink}>Profiles</NavLink>
               <NavLink to="/workspace" className={navLink}>Workspace</NavLink>
               <NavLink to="/progress" className={navLink}>Progress</NavLink>
             </>

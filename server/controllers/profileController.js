@@ -23,9 +23,12 @@ exports.create = async (req, res) => {
 // PUT /api/profile/:id — update a profile owned by the user
 exports.update = async (req, res) => {
   try {
+    const body = { ...(req.body || {}) };
+    delete body.userId;
+    delete body._id;
     const profile = await Profile.findOneAndUpdate(
       { _id: req.params.id, userId: req.user._id },
-      req.body,
+      body,
       { new: true, runValidators: true }
     );
     if (!profile) return res.status(404).json({ error: 'Profile not found' });

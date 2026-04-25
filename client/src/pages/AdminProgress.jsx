@@ -10,6 +10,7 @@ import {
   useDraggable,
 } from '@dnd-kit/core';
 import { adminListUsers, adminGetUserCVs, adminGetUserProfiles, updateCVStatus } from '../api.js';
+import { profileRefToIdString } from '../utils/profileRef.js';
 
 const STATUS_CONFIG = {
   saved:     { label: 'Saved',     bg: 'bg-gray-50',   border: 'border-gray-200',   heading: 'text-gray-600',   dot: 'bg-gray-400',   badge: 'bg-gray-100 text-gray-600' },
@@ -37,7 +38,13 @@ function CVCard({ cv, isDragging, navigate, profileLabel }) {
     >
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-primary text-xs leading-snug truncate">{cv.role_title}</p>
-        <p className="text-xs text-gray-500 truncate">{cv.company_name} · {cv.job_type}</p>
+        <p className="text-xs text-gray-500 truncate">
+          {[
+            cv.company_name,
+            cv.job_type,
+            cv.remote_status && cv.remote_status !== 'Unspecified' ? cv.remote_status : null,
+          ].filter(Boolean).join(' · ')}
+        </p>
         {cv.salary_range && <p className="text-xs text-gray-400">{cv.salary_range}</p>}
         {profileLabel && (
           <p className="text-xs text-accent mt-0.5 truncate">{profileLabel}</p>
@@ -107,7 +114,7 @@ function KanbanColumn({ status, cvs, activeId, navigate, profileMap }) {
               cv={cv}
               isDragging={String(activeId) === String(cv._id)}
               navigate={navigate}
-              profileLabel={profileMap[cv.profileId?.toString()]}
+              profileLabel={profileMap[profileRefToIdString(cv.profileId)]}
             />
           ))}
         </div>
@@ -158,7 +165,7 @@ export default function AdminProgress() {
 
   // Filter CVs by selected profile
   const visibleCvs = selectedProfileId
-    ? cvList.filter((c) => c.profileId?.toString() === selectedProfileId)
+    ? cvList.filter((c) => profileRefToIdString(c.profileId) === selectedProfileId)
     : cvList;
 
   const grouped = ALL_STATUSES.reduce((acc, s) => {
@@ -238,13 +245,14 @@ export default function AdminProgress() {
               <span className="ml-1 opacity-70">({cvList.length})</span>
             </button>
             {profiles.map((p) => {
-              const count = cvList.filter((c) => c.profileId?.toString() === p._id.toString()).length;
+              const pidStr = String(p._id);
+              const count = cvList.filter((c) => profileRefToIdString(c.profileId) === pidStr).length;
               return (
                 <button
                   key={p._id}
-                  onClick={() => setSelectedProfileId(p._id)}
+                  onClick={() => setSelectedProfileId(pidStr)}
                   className={`px-3 py-1 rounded-lg text-xs border transition font-medium ${
-                    selectedProfileId === p._id
+                    String(selectedProfileId) === pidStr
                       ? 'bg-accent text-white border-accent'
                       : 'border-gray-200 text-gray-600 hover:border-accent hover:text-accent'
                   }`}

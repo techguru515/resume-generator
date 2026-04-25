@@ -39,6 +39,12 @@ export const listWorkspaceLinks = (params) =>
 export const saveWorkspaceLinks = (data) => api.post('/workspace-links', data).then((r) => r.data);
 export const deleteWorkspaceLinks = (ids) =>
   api.post('/workspace-links/delete-batch', { ids }).then((r) => r.data);
+export const setProfileForWorkspaceLinks = ({ ids, profileId }) =>
+  api.post('/workspace-links/set-profile', { ids, profileId }).then((r) => r.data);
+export const setJobDescriptionForWorkspaceLink = ({ id, jobDescription }) =>
+  api.post('/workspace-links/set-jd', { id, jobDescription }).then((r) => r.data);
+export const generateCvsForWorkspaceLinks = ({ ids, profileId, jobDescriptionsByLinkId }) =>
+  api.post('/workspace-links/generate-cvs', { ids, profileId, jobDescriptionsByLinkId }).then((r) => r.data);
 
 // Admin
 export const adminStats = () => api.get('/admin/stats').then((r) => r.data);

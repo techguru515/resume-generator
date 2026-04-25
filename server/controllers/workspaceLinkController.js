@@ -1,6 +1,9 @@
 const mongoose = require('mongoose');
 const UploadedLink = require('../models/UploadedLink');
 const Profile = require('../models/Profile');
+const CV = require('../models/CV');
+const JobDescription = require('../models/JobDescription');
+const { generateCvJsonWithOpenAI } = require('../services/openaiCvService');
 
 function normalizeUrl(raw) {
   const s = String(raw || '').trim();
@@ -28,6 +31,7 @@ exports.list = async (req, res) => {
       filter.profileId = profileId;
     }
     const links = await UploadedLink.find(filter)
+      .populate('jobDescriptionId', 'text')
       .sort({ updatedAt: -1, createdAt: -1 })
       .limit(2000)
       .lean();
@@ -67,21 +71,20 @@ exports.saveBatch = async (req, res) => {
       const existing = await UploadedLink.findOne({ userId, normalizedUrl: normKey });
 
       if (existing) {
-        const prevUpdated = existing.updatedAt || existing.createdAt;
-        await UploadedLink.collection.updateOne(
+        // Same URL seen again: mark duplicate and refresh updatedAt only here — not on profile/JD/CV edits.
+        await UploadedLink.updateOne(
           { _id: existing._id },
           {
             $set: {
               sourceFileName: sourceFileName.slice(0, 512),
-              // Keep any profileId set during CV creation; uploads default to no profile.
-              profileId: existing.profileId ?? null,
               url: url.slice(0, 2048),
               normalizedUrl: normKey,
-              createdAt: prevUpdated,
+              profileId: existing.profileId ?? null,
+              isDuplicate: true,
               updatedAt: new Date(),
-              isDuplicate: false,
             },
-          }
+          },
+          { timestamps: false }
         );
         const updated = await UploadedLink.findById(existing._id).lean();
         results.push(updated);
@@ -151,12 +154,6 @@ exports.setProfileForLinks = async (req, res) => {
     if (ids.length > 500) {
       return res.status(400).json({ error: 'Maximum 500 ids per request' });
     }
-    if (!profileId || !mongoose.Types.ObjectId.isValid(String(profileId))) {
-      return res.status(400).json({ error: 'Invalid profileId' });
-    }
-
-    const profile = await Profile.findOne({ _id: profileId, userId: req.user._id }).lean();
-    if (!profile) return res.status(404).json({ error: 'Profile not found' });
 
     const objectIds = [];
     for (const id of ids) {
@@ -166,12 +163,238 @@ exports.setProfileForLinks = async (req, res) => {
       objectIds.push(new mongoose.Types.ObjectId(String(id)));
     }
 
+    // Allow clearing profile back to "no profile"
+    const requested = profileId == null ? '' : String(profileId).trim();
+    if (!requested) {
+      const result = await UploadedLink.updateMany(
+        { _id: { $in: objectIds }, userId: req.user._id },
+        { $set: { profileId: null } },
+        { timestamps: false }
+      );
+      return res.json({
+        matchedCount: result.matchedCount ?? result.n,
+        modifiedCount: result.modifiedCount ?? result.nModified,
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(requested)) {
+      return res.status(400).json({ error: 'Invalid profileId' });
+    }
+
+    const profile = await Profile.findOne({ _id: requested, userId: req.user._id }).lean();
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
     const result = await UploadedLink.updateMany(
       { _id: { $in: objectIds }, userId: req.user._id },
-      { $set: { profileId: profile._id } }
+      { $set: { profileId: profile._id } },
+      { timestamps: false }
     );
 
     res.json({ matchedCount: result.matchedCount ?? result.n, modifiedCount: result.modifiedCount ?? result.nModified });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// POST /api/workspace-links/set-jd  { id: string, jobDescription: string }
+exports.setJobDescriptionForLink = async (req, res) => {
+  try {
+    const { id, jobDescription } = req.body || {};
+    if (!id || !mongoose.Types.ObjectId.isValid(String(id))) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+
+    const jd = String(jobDescription || '')
+      .replace(/\r/g, '\n')
+      .trim()
+      .slice(0, 18_000);
+
+    const link = await UploadedLink.findOne({ _id: String(id), userId: req.user._id });
+    if (!link) return res.status(404).json({ error: 'Link not found' });
+
+    let jdDoc = null;
+    if (link.jobDescriptionId) {
+      jdDoc = await JobDescription.findOneAndUpdate(
+        { _id: link.jobDescriptionId, userId: req.user._id },
+        { $set: { text: jd } },
+        { new: true }
+      ).lean();
+    }
+    if (!jdDoc) {
+      jdDoc = await JobDescription.create({ userId: req.user._id, text: jd });
+      await UploadedLink.updateOne(
+        { _id: link._id, userId: req.user._id },
+        { $set: { jobDescriptionId: jdDoc._id } },
+        { timestamps: false }
+      );
+    }
+
+    const updated = await UploadedLink.findOne({ _id: String(id), userId: req.user._id })
+      .populate('jobDescriptionId', 'text')
+      .lean();
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+function validOid(v) {
+  return v != null && v !== '' && mongoose.Types.ObjectId.isValid(String(v));
+}
+
+function linkProfileIdOrDefault(link, defaultProfileId) {
+  if (validOid(link.profileId)) return String(link.profileId);
+  return defaultProfileId;
+}
+
+// POST /api/workspace-links/generate-cvs  { ids: string[], profileId: string, jobDescriptionsByLinkId?: Record<string,string> }
+// Uses each link's stored profileId when set; otherwise falls back to body profileId.
+exports.generateCvsForLinks = async (req, res) => {
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(503).json({
+        error: 'OpenAI is not configured. Add OPENAI_API_KEY to server/.env and restart.',
+      });
+    }
+
+    const { ids, profileId, jobDescriptionsByLinkId } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids must be a non-empty array' });
+    }
+    if (ids.length > 50) {
+      return res.status(400).json({ error: 'Maximum 50 links per request' });
+    }
+
+    const objectIds = [];
+    for (const id of ids) {
+      if (!mongoose.Types.ObjectId.isValid(String(id))) {
+        return res.status(400).json({ error: 'Invalid id in list' });
+      }
+      objectIds.push(new mongoose.Types.ObjectId(String(id)));
+    }
+
+    const links = await UploadedLink.find({ _id: { $in: objectIds }, userId: req.user._id }).lean();
+    if (links.length === 0) return res.status(404).json({ error: 'No matching links found' });
+
+    const defaultProfileId = validOid(profileId) ? String(profileId) : '';
+    const linksNeedingDefault = links.filter((l) => !validOid(l.profileId));
+    if (linksNeedingDefault.length > 0 && !defaultProfileId) {
+      return res.status(400).json({
+        error:
+          'Assign a profile to each selected link (Profile column), or send profileId for links without one.',
+      });
+    }
+
+    // Mark as pending first (best-effort).
+    await UploadedLink.updateMany(
+      { _id: { $in: links.map((l) => l._id) }, userId: req.user._id },
+      { $set: { cvStatus: 'pending', cvError: '' } },
+      { timestamps: false }
+    );
+
+    const created = [];
+    const failed = [];
+
+    const jdMap = (jobDescriptionsByLinkId && typeof jobDescriptionsByLinkId === 'object')
+      ? jobDescriptionsByLinkId
+      : {};
+
+    const jdIds = [...new Set(links.map((l) => String(l.jobDescriptionId || '')).filter(Boolean))];
+    const jdDocs = jdIds.length
+      ? await JobDescription.find({ _id: { $in: jdIds }, userId: req.user._id }).lean()
+      : [];
+    const jdTextById = Object.fromEntries(jdDocs.map((d) => [String(d._id), String(d.text || '')]));
+
+    const profileCache = new Map();
+
+    async function profileForLink(link) {
+      const pid = linkProfileIdOrDefault(link, defaultProfileId);
+      if (!validOid(pid)) {
+        throw new Error('No profile for this link. Choose one in the Profile column.');
+      }
+      const key = String(pid);
+      if (profileCache.has(key)) return profileCache.get(key);
+      const doc = await Profile.findOne({ _id: pid, userId: req.user._id });
+      if (!doc) throw new Error('Profile not found for this link.');
+      profileCache.set(key, doc);
+      return doc;
+    }
+
+    // Sequential to avoid many OpenAI calls at once.
+    for (const link of links) {
+      const linkId = String(link._id);
+      const jobLink = String(link.url || '').trim();
+      try {
+        if (!jobLink) throw new Error('Link URL is empty');
+
+        const rawJd = String(jdTextById[String(link.jobDescriptionId || '')] || jdMap[linkId] || '').trim();
+        const jobText = rawJd
+          .replace(/\r/g, '\n')
+          .replace(/[ \t]+\n/g, '\n')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim()
+          .slice(0, 18_000);
+
+        if (!jobText || jobText.length < 40) {
+          throw new Error('Job description is missing for this link');
+        }
+
+        const profile = await profileForLink(link);
+
+        const payload = await generateCvJsonWithOpenAI({
+          jobDescription: jobText,
+          jobLink,
+          profile: profile.toObject(),
+        });
+
+        const cv = new CV({
+          ...payload,
+          userId: req.user._id,
+          profileId: profile._id,
+          job_link: jobLink,
+          job_description: jobText,
+          jobDescriptionId: link.jobDescriptionId || null,
+        });
+        await cv.save();
+
+        await UploadedLink.updateOne(
+          { _id: link._id, userId: req.user._id },
+          { $set: { cvStatus: 'created', cvId: cv._id, cvError: '', profileId: profile._id } },
+          { timestamps: false }
+        );
+
+        created.push(cv.toObject());
+      } catch (err) {
+        const msg = err?.message ? String(err.message) : 'CV generation failed';
+        const entry = { message: msg.slice(0, 2000), failedAt: new Date() };
+        await UploadedLink.updateOne(
+          { _id: link._id, userId: req.user._id },
+          {
+            $set: { cvStatus: 'failed', cvError: msg.slice(0, 600) },
+            $push: {
+              cvErrorHistory: {
+                $each: [entry],
+                $slice: -50,
+              },
+            },
+          },
+          { timestamps: false }
+        );
+        failed.push({
+          linkId,
+          url: (String(link.url || '').trim() || jobLink || '').slice(0, 2048),
+          error: msg,
+        });
+      }
+    }
+
+    const freshLinks = await UploadedLink.find({ userId: req.user._id })
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .limit(2000)
+      .lean();
+
+    res.json({ createdCount: created.length, failedCount: failed.length, created, failed, links: freshLinks });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
