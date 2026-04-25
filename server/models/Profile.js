@@ -22,6 +22,29 @@ const WorkExperienceSchema = new mongoose.Schema({
   current: { type: Boolean, default: false },
 }, { _id: false });
 
+/** Drives OpenAI CV JSON shape / counts for this profile (Profiles tab → “CV generation”). */
+const CvGenerationSchema = new mongoose.Schema(
+  {
+    yearsExperienceMention: { type: Number, default: 11 },
+    summarySentencesMin: { type: Number, default: 3 },
+    summarySentencesMax: { type: Number, default: 4 },
+    skillsCategoriesMin: { type: Number, default: 4 },
+    skillsCategoriesMax: { type: Number, default: 6 },
+    skillsPerCategoryMin: { type: Number, default: 8 },
+    skillsPerCategoryMax: { type: Number, default: 10 },
+    skillsMinTotal: { type: Number, default: 30 },
+    /** e.g. ["12-15","10-12","6-8"] — job slot i uses index min(i-1, length-1) for further rows */
+    experienceBulletRanges: { type: [String], default: undefined },
+    /** When profile has no work rows: number of synthetic role/bullet blocks (max 3 matches CV schema). */
+    syntheticRoleCount: { type: Number, default: 3, min: 1, max: 3 },
+    preCheckEnabled: { type: Boolean, default: true },
+    extraInstructions: { type: String, default: '' },
+    /** When non-empty, replaces the built ATS template for OpenAI system message (see server appendJsonContract). */
+    customSystemPrompt: { type: String, default: '', maxlength: 48000 },
+  },
+  { _id: false }
+);
+
 const ProfileSchema = new mongoose.Schema(
   {
     userId: { type: 'ObjectId', ref: 'User', required: true },
@@ -36,6 +59,7 @@ const ProfileSchema = new mongoose.Schema(
     workExperiences: { type: [WorkExperienceSchema], default: [] },
     education: { type: [EducationSchema], default: [] },
     certifications: { type: [CertificationSchema], default: [] },
+    cvGeneration: { type: CvGenerationSchema, default: () => ({}) },
   },
   { timestamps: true }
 );

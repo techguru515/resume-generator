@@ -60,7 +60,19 @@ function TrashIcon({ className = 'w-4 h-4' }) {
   );
 }
 
-function CvCreateBadge({ status }) {
+function failedCvHoverText(row) {
+  const err = String(row?.cvError || '').trim();
+  let t = err;
+  if (!t) {
+    const hist = Array.isArray(row?.cvErrorHistory) ? row.cvErrorHistory : [];
+    const last = hist.length ? hist[hist.length - 1] : null;
+    t = last?.message ? String(last.message).trim() : '';
+  }
+  if (!t) return 'CV generation failed.';
+  return t.length > 4000 ? `${t.slice(0, 3997)}…` : t;
+}
+
+function CvCreateBadge({ status, errorTitle }) {
   const s = String(status || 'not_started');
   const cfg = {
     not_started: { label: 'Empty', cls: 'bg-gray-100 text-gray-600' },
@@ -69,8 +81,13 @@ function CvCreateBadge({ status }) {
     failed: { label: 'Failed', cls: 'bg-red-100 text-red-700' },
   }[s] || { label: 'Empty', cls: 'bg-gray-100 text-gray-600' };
 
+  const tip = s === 'failed' && errorTitle ? String(errorTitle) : undefined;
+
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cfg.cls}`}>
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cfg.cls} ${s === 'failed' && tip ? 'cursor-help' : ''}`}
+      title={tip}
+    >
       {cfg.label}
     </span>
   );
@@ -84,7 +101,7 @@ const LINK_CV_STATUS_RANK = {
   failed: 3,
 };
 
-/** CV status only; used with linkCvStatusSort dropdown */
+/** CV status only; used with CV status filter dropdown */
 function compareCvStatusWithMode(a, b, mode) {
   const empty = (r) => !r.cvStatus || r.cvStatus === 'not_started';
   const aE = empty(a);
@@ -220,20 +237,22 @@ export default function Workspace() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [tableProfileFilter, setTableProfileFilter] = useState('all');
   const [linkSearch, setLinkSearch] = useState('');
-  const [linkProfileFilter, setLinkProfileFilter] = useState('all');
+  const [linkDateFilter, setLinkDateFilter] = useState('all');
+  const [linkCvStatusFilter, setLinkCvStatusFilter] = useState('all');
   const [linkPage, setLinkPage] = useState(1);
   const [cvPage, setCvPage] = useState(1);
   const [linkPageSize, setLinkPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [cvPageSize, setCvPageSize] = useState(DEFAULT_PAGE_SIZE);
 
-  /** Saved links table: default = newest created first; optional primary sort by CV status */
-  const [linkCvStatusSort, setLinkCvStatusSort] = useState('default');
+  /** Saved links table: filter by CV status */
   const [cvSortField, setCvSortField] = useState('updated');
   const [cvSortOrder, setCvSortOrder] = useState('desc');
 
   const [selectedLinkIds, setSelectedLinkIds] = useState([]);
   const [deletingLinks, setDeletingLinks] = useState(false);
   const [generatingLinks, setGeneratingLinks] = useState(false);
+  /** Last bulk Generate CV result (partial success supported); failures list every link error. */
+  const [lastBulkGenResult, setLastBulkGenResult] = useState(null);
   const [updatingProfileLinkIds, setUpdatingProfileLinkIds] = useState([]);
   const linkSelectAllRef = useRef(null);
 
@@ -373,10 +392,35 @@ export default function Workspace() {
   const linkTableRows = useMemo(() => {
     const list = Array.isArray(savedLinks) ? savedLinks : [];
     const q = linkSearch.trim().toLowerCase();
+
+    function startOfDay(d) {
+      const x = new Date(d);
+      x.setHours(0, 0, 0, 0);
+      return x;
+    }
+
+    function isWithinSelectedPeriod(rowCreatedAt) {
+      if (linkDateFilter === 'all') return true;
+      const t = new Date(rowCreatedAt || 0).getTime();
+      if (!Number.isFinite(t) || t <= 0) return false;
+
+      const now = new Date();
+      const today0 = startOfDay(now).getTime();
+
+      if (linkDateFilter === 'today') return t >= today0;
+      if (linkDateFilter === 'last2') return t >= today0 - 2 * 24 * 60 * 60 * 1000;
+      if (linkDateFilter === 'last3') return t >= today0 - 3 * 24 * 60 * 60 * 1000;
+      if (linkDateFilter === 'last7') return t >= today0 - 7 * 24 * 60 * 60 * 1000;
+      if (linkDateFilter === 'last15') return t >= today0 - 15 * 24 * 60 * 60 * 1000;
+      return true;
+    }
+
     const rows = list
       .filter((row) => {
-        const pid = profileRefToIdString(row.profileId);
-        if (linkProfileFilter !== 'all' && pid !== String(linkProfileFilter)) return false;
+        if (!isWithinSelectedPeriod(row.createdAt)) return false;
+
+        const st = String(row.cvStatus || 'not_started');
+        if (linkCvStatusFilter !== 'all' && st !== linkCvStatusFilter) return false;
 
         if (!q) return true;
         const url = (row.url || '').toLowerCase();
@@ -394,6 +438,9 @@ export default function Workspace() {
         isDuplicate: row.isDuplicate === true,
         profileId: row.profileId,
         cvStatus: row.cvStatus || 'not_started',
+        cvError: String(row.cvError || '').trim(),
+        cvErrorHistory: Array.isArray(row.cvErrorHistory) ? row.cvErrorHistory : [],
+        cvId: row.cvId || null,
       }));
 
     /** Newest created first; ties break by newest updated */
@@ -407,23 +454,9 @@ export default function Workspace() {
       );
     };
 
-    rows.sort((a, b) => {
-      if (linkCvStatusSort !== 'default') {
-        const mode =
-          linkCvStatusSort === 'pipeline'
-            ? 'asc'
-            : linkCvStatusSort === 'pipelineDesc'
-              ? 'desc'
-              : linkCvStatusSort === 'emptyFirst'
-                ? 'absentFirst'
-                : 'absentLast';
-        const c = compareCvStatusWithMode(a, b, mode);
-        if (c !== 0) return c;
-      }
-      return defaultLinkOrder(a, b);
-    });
+    rows.sort(defaultLinkOrder);
     return rows;
-  }, [savedLinks, linkSearch, linkProfileFilter, profileLabelById, linkCvStatusSort]);
+  }, [savedLinks, linkSearch, linkDateFilter, linkCvStatusFilter, profileLabelById]);
 
   const sortedFilteredCvs = useMemo(() => {
     const rows = [...filteredCvs];
@@ -457,7 +490,7 @@ export default function Workspace() {
 
   useEffect(() => {
     setLinkPage(1);
-  }, [linkSearch, linkProfileFilter, linkPageSize, linkCvStatusSort]);
+  }, [linkSearch, linkDateFilter, linkCvStatusFilter, linkPageSize]);
 
   useEffect(() => {
     const tp = Math.ceil(linkTableRows.length / linkPageSize) || 1;
@@ -595,6 +628,7 @@ export default function Workspace() {
 
     setGeneratingLinks(true);
     setLinksError('');
+    setLastBulkGenResult(null);
     try {
       const resp = await generateCvsForWorkspaceLinks({
         ids: unique,
@@ -604,11 +638,14 @@ export default function Workspace() {
       if (resp?.links) setSavedLinks(Array.isArray(resp.links) ? resp.links : []);
       const freshCvs = await listCVs();
       setCvList(Array.isArray(freshCvs) ? freshCvs : []);
-      if (resp?.failedCount) {
-        const first = Array.isArray(resp.failed) && resp.failed[0]?.error ? resp.failed[0].error : 'Some CVs failed to generate';
-        setLinksError(`${resp.failedCount} failed. First error: ${first}`);
+      const createdCount = resp?.createdCount ?? 0;
+      const failedCount = resp?.failedCount ?? 0;
+      const failures = Array.isArray(resp?.failed) ? resp.failed : [];
+      if (createdCount > 0 || failedCount > 0) {
+        setLastBulkGenResult({ createdCount, failedCount, failures });
       }
     } catch (err) {
+      setLastBulkGenResult(null);
       setLinksError(err.response?.data?.error || err.message || 'Failed to generate CVs');
     } finally {
       setGeneratingLinks(false);
@@ -703,35 +740,6 @@ export default function Workspace() {
                   className="hidden"
                   onChange={handleFileInput}
                 />
-                {uploadedFiles.length > 0 && (
-                  <ul className="divide-y border border-gray-100 rounded-lg overflow-hidden">
-                    {uploadedFiles.map((item) => (
-                      <li key={item.id} className="flex items-center gap-3 px-3 py-2.5 bg-white text-sm">
-                        <span className="text-gray-400 shrink-0">📄</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium text-primary truncate">{item.name}</p>
-                          <p className="text-xs text-gray-400">
-                            {formatBytes(item.size)}
-                            {item.extracting ? (
-                              <span className="text-accent ml-2">Scanning for links…</span>
-                            ) : (
-                              <span className="text-gray-500 ml-2">
-                                {(item.urls?.length || 0)} link{(item.urls?.length || 0) !== 1 ? 's' : ''} found
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); removeUploaded(item.id); }}
-                          className="text-xs text-red-500 hover:text-red-700 shrink-0 px-2 py-1 rounded-lg hover:bg-red-50"
-                        >
-                          Remove
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
               </div>
 
               <div className="space-y-3 min-w-0 border-t border-gray-100 pt-8">
@@ -785,31 +793,32 @@ export default function Workspace() {
                 />
               </div>
               <div className="min-w-0">
-                <label className="block text-xs font-semibold text-gray-500 mb-0.5">Profile</label>
+                <label className="block text-xs font-semibold text-gray-500 mb-0.5">Period</label>
                 <select
-                  value={linkProfileFilter}
-                  onChange={(e) => setLinkProfileFilter(e.target.value)}
+                  value={linkDateFilter}
+                  onChange={(e) => setLinkDateFilter(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
                 >
-                  <option value="all">All profiles</option>
-                  <option value="">No profile</option>
-                  {profiles.map((p) => (
-                    <option key={p._id} value={String(p._id)}>{p.label}</option>
-                  ))}
+                  <option value="all">All time</option>
+                  <option value="today">Today</option>
+                  <option value="last2">Last 2 days</option>
+                  <option value="last3">Last 3 days</option>
+                  <option value="last7">Last 7 days</option>
+                  <option value="last15">Last 15 days</option>
                 </select>
               </div>
               <div className="min-w-0">
-                <label className="block text-xs font-semibold text-gray-500 mb-0.5">Sort by CV status</label>
+                <label className="block text-xs font-semibold text-gray-500 mb-0.5">Filter by CV status</label>
                 <select
-                  value={linkCvStatusSort}
-                  onChange={(e) => setLinkCvStatusSort(e.target.value)}
+                  value={linkCvStatusFilter}
+                  onChange={(e) => setLinkCvStatusFilter(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
                 >
-                  <option value="default">Default (newest created first)</option>
-                  <option value="pipeline">Pipeline (empty → pending → created → failed)</option>
-                  <option value="pipelineDesc">Reverse pipeline</option>
-                  <option value="emptyFirst">Empty CV first</option>
-                  <option value="emptyLast">Empty CV last</option>
+                  <option value="all">All</option>
+                  <option value="not_started">Empty</option>
+                  <option value="pending">Creating…</option>
+                  <option value="created">Created</option>
+                  <option value="failed">Failed</option>
                 </select>
               </div>
               <div className="min-w-0">
@@ -829,6 +838,47 @@ export default function Workspace() {
 
           {linksError && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">{linksError}</div>
+          )}
+
+          {lastBulkGenResult && (lastBulkGenResult.createdCount > 0 || lastBulkGenResult.failedCount > 0) && (
+            <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50/90 p-3 text-sm">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <p className="font-semibold text-gray-800">Generate CV finished</p>
+                <button
+                  type="button"
+                  onClick={() => setLastBulkGenResult(null)}
+                  className="text-xs text-gray-500 hover:text-gray-800 underline shrink-0"
+                >
+                  Dismiss
+                </button>
+              </div>
+              {lastBulkGenResult.createdCount > 0 && (
+                <p className="text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-md px-2 py-1.5 text-xs">
+                  Created {lastBulkGenResult.createdCount} CV{lastBulkGenResult.createdCount !== 1 ? 's' : ''}.
+                </p>
+              )}
+              {lastBulkGenResult.failedCount > 0 && (
+                <div className="text-amber-950 bg-amber-50 border border-amber-200 rounded-md px-2 py-2 text-xs space-y-1.5">
+                  <p className="font-semibold">
+                    {lastBulkGenResult.failedCount} link{lastBulkGenResult.failedCount !== 1 ? 's' : ''} failed (others were processed)
+                  </p>
+                  <ul className="list-disc pl-4 space-y-1 max-h-48 overflow-y-auto">
+                    {(lastBulkGenResult.failures || []).map((f) => (
+                      <li key={String(f.linkId)} className="break-words">
+                        <span className="text-gray-600 font-mono text-[11px]">
+                          {(f.url || '').length > 72 ? `${(f.url || '').slice(0, 72)}…` : (f.url || f.linkId || '—')}
+                        </span>
+                        {': '}
+                        <span className="text-red-800">{f.error || 'Unknown error'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-[11px] text-amber-900/90 pt-1">
+                    Each failed link still stores the latest reason in the database — hover the <strong className="font-medium">Failed</strong> badge in the CV status column to read it.
+                  </p>
+                </div>
+              )}
+            </div>
           )}
 
           {loadingSavedLinks ? (
@@ -882,10 +932,10 @@ export default function Workspace() {
               </div>
               {linkTableRows.length > 0 && (
                 <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="overflow-x-hidden">
+                  <div className="max-h-[520px] overflow-y-auto overflow-x-hidden">
                     <table className="w-full text-sm table-fixed min-w-0">
                       <thead>
-                        <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide sticky top-0 z-10">
                           <th className="px-1.5 py-3 w-11 text-center">
                             <label className="inline-flex cursor-pointer items-center justify-center rounded-md focus-within:outline-none focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-1">
                               <input
@@ -976,8 +1026,11 @@ export default function Workspace() {
                                 >
                                   {formatUpdatedCell(row)}
                                 </td>
-                                <td className="px-4 py-3">
-                                  <CvCreateBadge status={row.cvStatus} />
+                                <td className="px-4 py-3 min-w-0 align-middle">
+                                  <CvCreateBadge
+                                    status={row.cvStatus}
+                                    errorTitle={row.cvStatus === 'failed' ? failedCvHoverText(row) : undefined}
+                                  />
                                 </td>
                                 <td className="px-4 py-3 pl-4 pr-1">
                                   <button
@@ -1069,7 +1122,7 @@ export default function Workspace() {
                             {Math.min(linkPage * linkPageSize, linkTableRows.length)}
                           </strong>
                           {' '}of <strong className="text-primary">{linkTableRows.length}</strong> link{linkTableRows.length !== 1 ? 's' : ''}
-                          {(linkSearch.trim() || linkProfileFilter !== 'all') ? ' (filtered)' : ''}
+                          {(linkSearch.trim() || linkDateFilter !== 'all' || linkCvStatusFilter !== 'all') ? ' (filtered)' : ''}
                           {' '}· {linkPageSize} / page
                         </>
                       ) : null}
@@ -1193,10 +1246,10 @@ export default function Workspace() {
             </div>
           ) : (
             <div className="border border-gray-200 rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className="max-h-[520px] overflow-y-auto overflow-x-auto">
                 <table className="w-full text-sm min-w-[720px]">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide sticky top-0 z-10">
                       <th className="px-4 py-3">Role</th>
                       <th className="px-4 py-3">Company</th>
                       <th className="px-4 py-3">Type</th>

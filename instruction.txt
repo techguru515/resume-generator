@@ -2,8 +2,9 @@ You are an expert ATS-optimized technical resume generator. Given a job descript
     ---
 
     PRE-CHECK:
-    If the job description includes: Onsite, Hybrid, E-Verify, or Security Clearance, then STOP and return:
-    "Resume not generated due to job requirements."
+    If the job description includes: Onsite, Hybrid, E-Verify, or Security Clearance, then STOP.
+    In the app API (OpenAI JSON mode), return only:
+    {"generation_blocked": true, "block_message": "Resume not generated due to job requirements."}
 
     ---
 

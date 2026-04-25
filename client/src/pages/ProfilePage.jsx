@@ -4,13 +4,37 @@ import { listProfiles, createProfile, updateProfile, deleteProfile } from '../ap
 const EMPTY_WORK = { company: '', role: '', startDate: '', endDate: '', current: false };
 const EMPTY_EDU = { institution: '', degree: '', field: '', startYear: '', endYear: '' };
 const EMPTY_CERT = { name: '', issuer: '', year: '' };
-const EMPTY_FORM = {
-  label: '', name: '', email: '', phone: '', location: '',
-  linkedin: '', github: '', website: '',
-  workExperiences: [],
-  education: [],
-  certifications: [],
-};
+
+function defaultCvGeneration() {
+  return {
+    yearsExperienceMention: 11,
+    summarySentencesMin: 3,
+    summarySentencesMax: 4,
+    skillsCategoriesMin: 4,
+    skillsCategoriesMax: 6,
+    skillsPerCategoryMin: 8,
+    skillsPerCategoryMax: 10,
+    skillsMinTotal: 30,
+    experienceBulletRanges: ['12-15', '10-12', '6-8'],
+    syntheticRoleCount: 3,
+    preCheckEnabled: true,
+    extraInstructions: '',
+    customSystemPrompt: '',
+  };
+}
+
+const MAX_CUSTOM_SYSTEM_PROMPT = 48000;
+
+function emptyFormState() {
+  return {
+    label: '', name: '', email: '', phone: '', location: '',
+    linkedin: '', github: '', website: '',
+    workExperiences: [],
+    education: [],
+    certifications: [],
+    cvGeneration: defaultCvGeneration(),
+  };
+}
 
 const CONTACT_FIELDS = [
   { key: 'label', label: 'Profile Label', required: true, placeholder: 'e.g. Backend CV, Full Stack Profile', span: true },
@@ -110,7 +134,7 @@ export default function ProfilePage() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(() => emptyFormState());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -122,9 +146,14 @@ export default function ProfilePage() {
     finally { setLoading(false); }
   }
 
-  function startNew() { setForm(EMPTY_FORM); setEditing('new'); setError(''); }
+  function startNew() { setForm(emptyFormState()); setEditing('new'); setError(''); }
 
   function startEdit(profile) {
+    const cg = profile.cvGeneration && typeof profile.cvGeneration === 'object' ? profile.cvGeneration : {};
+    const baseGen = defaultCvGeneration();
+    const ranges = Array.isArray(cg.experienceBulletRanges) && cg.experienceBulletRanges.length
+      ? cg.experienceBulletRanges.map((x) => String(x).trim()).filter(Boolean)
+      : baseGen.experienceBulletRanges;
     setForm({
       label: profile.label || '',
       name: profile.name || '',
@@ -137,12 +166,52 @@ export default function ProfilePage() {
       workExperiences: profile.workExperiences?.length ? profile.workExperiences : [],
       education: profile.education?.length ? profile.education : [],
       certifications: profile.certifications?.length ? profile.certifications : [],
+      cvGeneration: {
+        ...baseGen,
+        ...cg,
+        experienceBulletRanges: ranges.length ? ranges : baseGen.experienceBulletRanges,
+      },
     });
     setEditing(profile._id);
     setError('');
   }
 
-  function cancelEdit() { setEditing(null); setForm(EMPTY_FORM); setError(''); }
+  function cancelEdit() { setEditing(null); setForm(emptyFormState()); setError(''); }
+
+  function updateCvGen(partial) {
+    setForm((f) => ({
+      ...f,
+      cvGeneration: { ...f.cvGeneration, ...partial },
+    }));
+  }
+
+  function updateBulletRange(index, value) {
+    setForm((f) => {
+      const list = [...(f.cvGeneration?.experienceBulletRanges || [])];
+      list[index] = value;
+      return { ...f, cvGeneration: { ...f.cvGeneration, experienceBulletRanges: list } };
+    });
+  }
+
+  function addBulletRange() {
+    setForm((f) => {
+      const list = [...(f.cvGeneration?.experienceBulletRanges || []), '6-8'];
+      return { ...f, cvGeneration: { ...f.cvGeneration, experienceBulletRanges: list } };
+    });
+  }
+
+  function removeBulletRange(index) {
+    setForm((f) => {
+      const list = (f.cvGeneration?.experienceBulletRanges || []).filter((_, i) => i !== index);
+      return {
+        ...f,
+        cvGeneration: {
+          ...f.cvGeneration,
+          experienceBulletRanges: list.length ? list : ['6-8'],
+        },
+      };
+    });
+  }
 
   // Work experience helpers
   function addWork() { setForm((f) => ({ ...f, workExperiences: [...f.workExperiences, { ...EMPTY_WORK }] })); }
@@ -172,12 +241,36 @@ export default function ProfilePage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setSaving(true); setError('');
+    const cg = form.cvGeneration || defaultCvGeneration();
+    const ranges = (cg.experienceBulletRanges || []).map((x) => String(x).trim()).filter(Boolean);
+    const payload = {
+      ...form,
+      cvGeneration: {
+        ...cg,
+        yearsExperienceMention: (() => {
+          const y = Number(cg.yearsExperienceMention);
+          return Number.isFinite(y) ? Math.max(0, Math.min(45, y)) : 11;
+        })(),
+        summarySentencesMin: Number(cg.summarySentencesMin),
+        summarySentencesMax: Number(cg.summarySentencesMax),
+        skillsCategoriesMin: Number(cg.skillsCategoriesMin),
+        skillsCategoriesMax: Number(cg.skillsCategoriesMax),
+        skillsPerCategoryMin: Number(cg.skillsPerCategoryMin),
+        skillsPerCategoryMax: Number(cg.skillsPerCategoryMax),
+        skillsMinTotal: Number(cg.skillsMinTotal),
+        syntheticRoleCount: Number(cg.syntheticRoleCount),
+        experienceBulletRanges: ranges.length ? ranges : defaultCvGeneration().experienceBulletRanges,
+        preCheckEnabled: Boolean(cg.preCheckEnabled),
+        extraInstructions: String(cg.extraInstructions || '').trim(),
+        customSystemPrompt: String(cg.customSystemPrompt || '').trim().slice(0, MAX_CUSTOM_SYSTEM_PROMPT),
+      },
+    };
     try {
       if (editing === 'new') {
-        const created = await createProfile(form);
+        const created = await createProfile(payload);
         setProfiles((prev) => [...prev, created]);
       } else {
-        const updated = await updateProfile(editing, form);
+        const updated = await updateProfile(editing, payload);
         setProfiles((prev) => prev.map((p) => (p._id === editing ? updated : p)));
       }
       cancelEdit();
@@ -207,6 +300,47 @@ export default function ProfilePage() {
           </button>
         )}
       </div>
+
+      {!editing && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-gray-700">
+          <p className="font-semibold text-primary mb-2">CV generation (Create CV) — how this profile is used</p>
+          <ul className="list-disc pl-5 space-y-1.5 text-xs leading-relaxed text-gray-600">
+            <li>
+              <span className="font-medium text-gray-700">Contact block</span> — name, email, phone, location, LinkedIn, GitHub, and website from this profile appear on the CV header.
+            </li>
+            <li>
+              <span className="font-medium text-gray-700">Work experience</span> — each row supplies company, title, and dates. OpenAI fills <code className="rounded bg-white/80 px-1 text-[11px] text-primary">experience1</code>…<code className="rounded bg-white/80 px-1 text-[11px] text-primary">experienceN</code> in the same order. Bullet targets per slot are <span className="font-medium text-gray-700">configurable</span> under <em>Edit profile → CV generation</em> (defaults: 12–15, 10–12, 6–8, then the last range repeats).
+            </li>
+            <li>
+              <span className="font-medium text-gray-700">No jobs on profile</span> — the model uses synthetic roles; how many (1–3) and bullet ranges follow your per-profile CV generation settings.
+            </li>
+            <li>
+              <span className="font-medium text-gray-700">Education &amp; certifications</span> — copied from this profile into the CV as written (not rewritten by AI).
+            </li>
+            <li>
+              <span className="font-medium text-gray-700">Generated JSON fields</span> — besides bullets, the model returns{' '}
+              <code className="rounded bg-white/80 px-1 text-[11px]">role_title</code>,{' '}
+              <code className="rounded bg-white/80 px-1 text-[11px]">developer_title</code>,{' '}
+              <code className="rounded bg-white/80 px-1 text-[11px]">company_name</code>,{' '}
+              <code className="rounded bg-white/80 px-1 text-[11px]">job_type</code>,{' '}
+              <code className="rounded bg-white/80 px-1 text-[11px]">remote_status</code>,{' '}
+              <code className="rounded bg-white/80 px-1 text-[11px]">salary_range</code>,{' '}
+              <code className="rounded bg-white/80 px-1 text-[11px]">summary</code>,{' '}
+              <code className="rounded bg-white/80 px-1 text-[11px]">skills</code> (category count and minimum totals are configurable per profile), and{' '}
+              <code className="rounded bg-white/80 px-1 text-[11px]">job_description</code> (short JD summary).
+            </li>
+            <li>
+              <span className="font-medium text-gray-700">Pre-check</span> — optional per profile: when enabled, postings that mention on-site, hybrid, E-Verify, or security clearance can block generation (see <code className="rounded bg-white/80 px-1 text-[11px]">instruction.txt</code>).
+            </li>
+            <li>
+              <span className="font-medium text-gray-700">Full custom prompt</span> — under <em>Edit profile → CV generation</em> you can paste a complete OpenAI <strong>system</strong> message. When it is non-empty it replaces the built-in template; the server still appends a short JSON contract so saves and previews keep working.
+            </li>
+          </ul>
+          <p className="mt-3 text-xs text-gray-500">
+            Use <a className="text-accent underline font-medium" href="/create">Create CV</a> with a profile selected to run generation.
+          </p>
+        </div>
+      )}
 
       {/* Profile list */}
       {profiles.length === 0 && !editing && (
@@ -354,6 +488,183 @@ export default function ProfilePage() {
                 ))}
                 {form.certifications.length === 0 && <p className="text-xs text-gray-400 italic">No certifications yet.</p>}
               </div>
+            </div>
+
+            {/* CV generation (per profile → OpenAI prompt) */}
+            <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-4 space-y-4">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">CV generation</h4>
+                <p className="text-xs text-gray-500 mt-1">
+                  Controls the OpenAI <strong>system</strong> message for <strong className="text-gray-700">Create CV</strong> and workspace bulk generate. The candidate profile (without these settings) is still sent in the user message.
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 bg-white/90 p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-xs font-semibold text-gray-700">Custom system prompt (full replacement)</label>
+                  <button
+                    type="button"
+                    onClick={() => updateCvGen({ customSystemPrompt: '' })}
+                    className="text-xs text-gray-500 hover:text-gray-800 underline"
+                  >
+                    Clear — use built-in template
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  Paste your entire instructions here (tone, ATS rules, pre-checks, section rules, etc.). When this field is not empty, it <strong>replaces</strong> the built-in template below. The server always appends a short &quot;JSON contract&quot; block so the app can parse and save the CV.
+                </p>
+                <textarea
+                  rows={14}
+                  maxLength={MAX_CUSTOM_SYSTEM_PROMPT}
+                  value={form.cvGeneration?.customSystemPrompt ?? ''}
+                  onChange={(e) => updateCvGen({ customSystemPrompt: e.target.value })}
+                  placeholder="Paste your full system prompt (e.g. from instruction.txt). Leave empty to use the built-in template + numeric options."
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent resize-y min-h-[200px]"
+                />
+                <p className="text-[11px] text-gray-400 text-right">
+                  {(form.cvGeneration?.customSystemPrompt || '').length} / {MAX_CUSTOM_SYSTEM_PROMPT}
+                </p>
+                {(form.cvGeneration?.customSystemPrompt || '').trim().length > 0 && (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5">
+                    Custom prompt is active — the built-in template and numeric options are ignored until you clear the text above.
+                  </p>
+                )}
+              </div>
+
+              <details className="rounded-lg border border-gray-200 bg-white/60 open:pb-3">
+                <summary className="cursor-pointer select-none px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 rounded-lg">
+                  Built-in template &amp; numeric options (only when custom prompt is empty)
+                </summary>
+                <div className="px-3 pt-2 space-y-4 border-t border-gray-100">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <label className="text-xs text-gray-600 col-span-2 md:col-span-1">
+                  Years in summary (0 = omit)
+                  <input
+                    type="number" min={0} max={45}
+                    value={form.cvGeneration?.yearsExperienceMention ?? 11}
+                    onChange={(e) => updateCvGen({ yearsExperienceMention: Number(e.target.value) })}
+                    className={`mt-1 ${INPUT_CLS}`}
+                  />
+                </label>
+                <label className="text-xs text-gray-600">
+                  Summary sentences (min)
+                  <input
+                    type="number" min={1} max={10}
+                    value={form.cvGeneration?.summarySentencesMin ?? 3}
+                    onChange={(e) => updateCvGen({ summarySentencesMin: Number(e.target.value) })}
+                    className={`mt-1 ${INPUT_CLS}`}
+                  />
+                </label>
+                <label className="text-xs text-gray-600">
+                  Summary sentences (max)
+                  <input
+                    type="number" min={1} max={10}
+                    value={form.cvGeneration?.summarySentencesMax ?? 4}
+                    onChange={(e) => updateCvGen({ summarySentencesMax: Number(e.target.value) })}
+                    className={`mt-1 ${INPUT_CLS}`}
+                  />
+                </label>
+                <label className="text-xs text-gray-600">
+                  Skill categories (min–max)
+                  <div className="mt-1 flex gap-2">
+                    <input
+                      type="number" min={1} max={12}
+                      value={form.cvGeneration?.skillsCategoriesMin ?? 4}
+                      onChange={(e) => updateCvGen({ skillsCategoriesMin: Number(e.target.value) })}
+                      className={`w-1/2 ${INPUT_CLS}`}
+                    />
+                    <input
+                      type="number" min={1} max={12}
+                      value={form.cvGeneration?.skillsCategoriesMax ?? 6}
+                      onChange={(e) => updateCvGen({ skillsCategoriesMax: Number(e.target.value) })}
+                      className={`w-1/2 ${INPUT_CLS}`}
+                    />
+                  </div>
+                </label>
+                <label className="text-xs text-gray-600">
+                  Skills / category (min–max)
+                  <div className="mt-1 flex gap-2">
+                    <input
+                      type="number" min={1} max={25}
+                      value={form.cvGeneration?.skillsPerCategoryMin ?? 8}
+                      onChange={(e) => updateCvGen({ skillsPerCategoryMin: Number(e.target.value) })}
+                      className={`w-1/2 ${INPUT_CLS}`}
+                    />
+                    <input
+                      type="number" min={1} max={25}
+                      value={form.cvGeneration?.skillsPerCategoryMax ?? 10}
+                      onChange={(e) => updateCvGen({ skillsPerCategoryMax: Number(e.target.value) })}
+                      className={`w-1/2 ${INPUT_CLS}`}
+                    />
+                  </div>
+                </label>
+                <label className="text-xs text-gray-600 col-span-2 md:col-span-1">
+                  Min. skills total
+                  <input
+                    type="number" min={5} max={80}
+                    value={form.cvGeneration?.skillsMinTotal ?? 30}
+                    onChange={(e) => updateCvGen({ skillsMinTotal: Number(e.target.value) })}
+                    className={`mt-1 ${INPUT_CLS}`}
+                  />
+                </label>
+                <label className="text-xs text-gray-600 col-span-2 md:col-span-1">
+                  Synthetic roles (no jobs on profile)
+                  <select
+                    value={form.cvGeneration?.syntheticRoleCount ?? 3}
+                    onChange={(e) => updateCvGen({ syntheticRoleCount: Number(e.target.value) })}
+                    className={`mt-1 ${INPUT_CLS}`}
+                  >
+                    <option value={1}>1 role block</option>
+                    <option value={2}>2 role blocks</option>
+                    <option value={3}>3 role blocks</option>
+                  </select>
+                </label>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-gray-600">Experience bullet ranges (job 1, job 2, …; last repeats)</span>
+                  <button type="button" onClick={addBulletRange} className="text-xs text-accent hover:underline">+ Add row</button>
+                </div>
+                <div className="space-y-2">
+                  {(form.cvGeneration?.experienceBulletRanges || []).map((r, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <span className="text-[11px] text-gray-400 w-16 shrink-0">Slot {i + 1}</span>
+                      <input
+                        type="text"
+                        value={r}
+                        onChange={(e) => updateBulletRange(i, e.target.value)}
+                        placeholder="e.g. 12-15"
+                        className={INPUT_CLS}
+                      />
+                      <button type="button" onClick={() => removeBulletRange(i)} className="text-xs text-red-400 shrink-0 px-2">Remove</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.cvGeneration?.preCheckEnabled !== false}
+                  onChange={(e) => updateCvGen({ preCheckEnabled: e.target.checked })}
+                  className="accent-accent rounded"
+                />
+                Enable JD pre-check (block when posting mentions on-site, hybrid, E-Verify, or security clearance)
+              </label>
+
+              <label className="block text-xs text-gray-600">
+                Extra instructions for the model (optional)
+                <textarea
+                  rows={3}
+                  value={form.cvGeneration?.extraInstructions || ''}
+                  onChange={(e) => updateCvGen({ extraInstructions: e.target.value })}
+                  placeholder="e.g. Prefer UK spelling; emphasize leadership; cap bullets at 8 per job…"
+                  className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-y"
+                />
+              </label>
+                </div>
+              </details>
             </div>
 
             {error && <p className="text-red-500 text-sm">{error}</p>}

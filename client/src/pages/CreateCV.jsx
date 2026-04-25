@@ -150,7 +150,7 @@ export default function CreateCV() {
               <label className="block text-sm font-semibold text-gray-700">Generate with OpenAI</label>
             </div>
             <p className="text-xs text-gray-400">
-              Paste any job text (messy paste is fine). The server uses <strong className="text-gray-600">OPENAI_API_KEY</strong> twice: first to pull structured role/company/requirements from the text, then to draft your CV from that plus your profile.
+              Paste any job text (messy paste is fine). The server calls OpenAI once with your profile and this text (requires <strong className="text-gray-600">OPENAI_API_KEY</strong>).
             </p>
             <textarea
               value={jobDescription}

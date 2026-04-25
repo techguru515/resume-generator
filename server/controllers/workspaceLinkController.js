@@ -367,12 +367,25 @@ exports.generateCvsForLinks = async (req, res) => {
         created.push(cv.toObject());
       } catch (err) {
         const msg = err?.message ? String(err.message) : 'CV generation failed';
+        const entry = { message: msg.slice(0, 2000), failedAt: new Date() };
         await UploadedLink.updateOne(
           { _id: link._id, userId: req.user._id },
-          { $set: { cvStatus: 'failed', cvError: msg.slice(0, 600) } },
+          {
+            $set: { cvStatus: 'failed', cvError: msg.slice(0, 600) },
+            $push: {
+              cvErrorHistory: {
+                $each: [entry],
+                $slice: -50,
+              },
+            },
+          },
           { timestamps: false }
         );
-        failed.push({ linkId, error: msg });
+        failed.push({
+          linkId,
+          url: (String(link.url || '').trim() || jobLink || '').slice(0, 2048),
+          error: msg,
+        });
       }
     }
 

@@ -1,5 +1,13 @@
 const mongoose = require('mongoose');
 
+const CvErrorHistoryEntrySchema = new mongoose.Schema(
+  {
+    message: { type: String, required: true, maxlength: 2000 },
+    failedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const UploadedLinkSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -16,7 +24,10 @@ const UploadedLinkSchema = new mongoose.Schema(
       index: true,
     },
     cvId: { type: mongoose.Schema.Types.ObjectId, ref: 'CV', default: null },
+    /** Latest failure message (also shown in workspace table). */
     cvError: { type: String, default: '' },
+    /** Append-only log of generation failures for this link (newest at end after each push; server trims). */
+    cvErrorHistory: { type: [CvErrorHistoryEntrySchema], default: [] },
   },
   { timestamps: true }
 );
