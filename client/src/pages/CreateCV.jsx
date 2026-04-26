@@ -18,6 +18,8 @@ export default function CreateCV() {
   const [saving, setSaving] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
 
+  const blocking = aiLoading || saving;
+
   useEffect(() => {
     listProfiles().then((data) => {
       setProfiles(data);
@@ -84,7 +86,23 @@ export default function CreateCV() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6 relative">
+      {blocking && (
+        <div
+          className="fixed inset-0 z-50 bg-white/70 backdrop-blur-[2px] flex items-center justify-center"
+          role="status"
+          aria-live="polite"
+          aria-label={aiLoading ? 'Generating resume…' : 'Saving…'}
+        >
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-gray-200 bg-white px-6 py-5 shadow-sm">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-accent" />
+            <p className="text-sm font-semibold text-primary">
+              {aiLoading ? 'Generating resume…' : 'Saving…'}
+            </p>
+            <p className="text-xs text-gray-500">Please wait.</p>
+          </div>
+        </div>
+      )}
       <h2 className="text-xl font-bold text-primary">Create CV</h2>
 
       <div className="grid md:grid-cols-[2fr_3fr] gap-6">

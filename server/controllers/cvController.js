@@ -139,9 +139,12 @@ exports.downloadDocx = async (req, res) => {
   try {
     const cv = await CV.findOne({ _id: req.params.id, ...ownerFilter(req) });
     if (!cv) return res.status(404).json({ error: 'CV not found' });
-    const profile = await getProfileById(cv.profileId);
+    const profile = await Profile.findById(rawProfileIdRef(cv.profileId)).populate('templateId');
+    if (!profile) throw new Error('Profile not found. Please select a valid profile.');
+    const tpl = profile.templateId && typeof profile.templateId === 'object' ? profile.templateId.toObject() : null;
+    const format = tpl && tpl.kind === 'built_in' && tpl.builtInKey ? tpl.builtInKey : profile.cvFormat;
 
-    const buffer = await generateDocx(cv.toObject(), profile.toObject());
+    const buffer = await generateDocx(cv.toObject(), profile.toObject(), { format });
     const filename = `CV_${cv.company_name}_${cv.role_title}.docx`
       .replace(/[^a-z0-9_\-. ]/gi, '_')
       .replace(/\s+/g, '_');
@@ -150,6 +153,7 @@ exports.downloadDocx = async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(buffer);
   } catch (err) {
+    console.error('downloadDocx:', err?.stack || err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -159,9 +163,14 @@ exports.downloadPdf = async (req, res) => {
   try {
     const cv = await CV.findOne({ _id: req.params.id, ...ownerFilter(req) });
     if (!cv) return res.status(404).json({ error: 'CV not found' });
-    const profile = await getProfileById(cv.profileId);
+    const profile = await Profile.findById(rawProfileIdRef(cv.profileId)).populate('templateId');
+    if (!profile) throw new Error('Profile not found. Please select a valid profile.');
+    const tpl = profile.templateId && typeof profile.templateId === 'object' ? profile.templateId.toObject() : null;
 
-    const buffer = await generatePdf(cv.toObject(), profile.toObject());
+    const buffer = await generatePdf(cv.toObject(), profile.toObject(), {
+      format: profile.cvFormat,
+      template: tpl,
+    });
     const filename = `CV_${cv.company_name}_${cv.role_title}.pdf`
       .replace(/[^a-z0-9_\-. ]/gi, '_')
       .replace(/\s+/g, '_');
@@ -172,6 +181,7 @@ exports.downloadPdf = async (req, res) => {
 
     res.end(buffer);
   } catch (err) {
+    console.error('downloadPdf:', err?.stack || err);
     res.status(500).json({ error: err.message });
   }
 };

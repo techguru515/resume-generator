@@ -33,6 +33,10 @@ export const createProfile = (data) => api.post('/profile', data).then((r) => r.
 export const updateProfile = (id, data) => api.put(`/profile/${id}`, data).then((r) => r.data);
 export const deleteProfile = (id) => api.delete(`/profile/${id}`).then((r) => r.data);
 
+// Templates
+export const listTemplates = () => api.get('/template').then((r) => r.data);
+export const getTemplate = (id) => api.get(`/template/${id}`).then((r) => r.data);
+
 // Workspace (saved hyperlinks from uploads)
 export const listWorkspaceLinks = (params) =>
   api.get('/workspace-links', { params }).then((r) => r.data);

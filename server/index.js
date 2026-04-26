@@ -13,6 +13,7 @@ app.use('/api/cv', require('./routes/cv'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/profile', require('./routes/profile'));
 app.use('/api/workspace-links', require('./routes/workspaceLinks'));
+app.use('/api/template', require('./routes/template'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
@@ -58,6 +59,14 @@ mongoose
   .then(async () => {
     console.log('MongoDB connected');
     await seedAdmin();
+    try {
+      const User = require('./models/User');
+      const admin = await User.findOne({ role: 'admin' }).select('_id');
+      const { seedTemplates } = require('./services/templateSeedService');
+      await seedTemplates({ adminUserId: admin?._id || null });
+    } catch (e) {
+      console.error('Template seed error:', e?.message || e);
+    }
     server = app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
     server.on('error', (err) => {
       // Avoid crashing without context; common case is EADDRINUSE when a previous process still owns the port.

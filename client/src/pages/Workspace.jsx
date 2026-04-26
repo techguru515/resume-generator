@@ -703,7 +703,21 @@ export default function Workspace() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6 relative">
+      {generatingLinks && (
+        <div
+          className="fixed inset-0 z-50 bg-white/70 backdrop-blur-[2px] flex items-center justify-center"
+          role="status"
+          aria-live="polite"
+          aria-label="Generating resumes…"
+        >
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-gray-200 bg-white px-6 py-5 shadow-sm">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-violet-600" />
+            <p className="text-sm font-semibold text-primary">Generating resumes…</p>
+            <p className="text-xs text-gray-500">Please wait.</p>
+          </div>
+        </div>
+      )}
       <h2 className="text-xl font-bold text-primary">Workspace</h2>
 
       {/* Upload files + manual link (stacked) */}
@@ -919,7 +933,6 @@ export default function Workspace() {
                       type="button"
                       disabled={deletingLinks}
                       onClick={() => {
-                        if (!window.confirm(`Delete ${selectedLinkIds.length} link(s)? This cannot be undone.`)) return;
                         removeLinksByIds(selectedLinkIds);
                       }}
                       className="inline-flex items-center gap-1.5 rounded-lg border-2 border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 shadow-sm hover:bg-red-50 disabled:opacity-50"
@@ -1048,7 +1061,6 @@ export default function Workspace() {
                                     type="button"
                                     disabled={deletingLinks || generatingLinks}
                                     onClick={() => {
-                                      if (!window.confirm('Delete this link? This cannot be undone.')) return;
                                       removeLinksByIds([row.key]);
                                     }}
                                     className="inline-flex items-center justify-center rounded-md p-1 text-red-600 hover:bg-red-50 hover:text-red-800 disabled:opacity-50"

@@ -25,25 +25,42 @@ const COLORS = {
   divider: 'CCCCCC',
 };
 
-function sectionHeading(text) {
+function resolveDocxTheme(format) {
+  const f = String(format || '').toLowerCase();
+  if (f === 'minimal' || f === 'executive') {
+    return {
+      primary: '111111',
+      accent: '111111',
+      text: '222222',
+      light: '555555',
+      divider: 'DDDDDD',
+      showSectionRule: false,
+    };
+  }
+  return { ...COLORS, showSectionRule: true };
+}
+
+function sectionHeading(text, theme) {
+  const t = theme || COLORS;
   return new Paragraph({
     spacing: { before: 200, after: 60 },
-    border: {
-      bottom: { color: COLORS.accent, size: 8, space: 4, style: BorderStyle.SINGLE },
-    },
+    border: t.showSectionRule
+      ? { bottom: { color: t.accent, size: 8, space: 4, style: BorderStyle.SINGLE } }
+      : undefined,
     children: [
       new TextRun({
         text: text.toUpperCase(),
         bold: true,
         size: 22,
-        color: COLORS.primary,
+        color: t.primary,
         font: 'Calibri',
       }),
     ],
   });
 }
 
-function bullet(text) {
+function bullet(text, theme) {
+  const t = theme || COLORS;
   return new Paragraph({
     spacing: { before: 40, after: 40 },
     indent: { left: 360 },
@@ -52,27 +69,29 @@ function bullet(text) {
       new TextRun({
         text,
         size: 19,
-        color: COLORS.text,
+        color: t.text,
         font: 'Calibri',
       }),
     ],
   });
 }
 
-function skillRow(category, skills) {
+function skillRow(category, skills, theme) {
+  const t = theme || COLORS;
   const label = category
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
   return new Paragraph({
     spacing: { before: 50, after: 50 },
     children: [
-      new TextRun({ text: `${label}: `, bold: true, size: 19, color: COLORS.primary, font: 'Calibri' }),
-      new TextRun({ text: skills.join(', '), size: 19, color: COLORS.text, font: 'Calibri' }),
+      new TextRun({ text: `${label}: `, bold: true, size: 19, color: t.primary, font: 'Calibri' }),
+      new TextRun({ text: skills.join(', '), size: 19, color: t.text, font: 'Calibri' }),
     ],
   });
 }
 
-async function generateDocx(cvData, profile) {
+async function generateDocx(cvData, profile, options = {}) {
+  const theme = resolveDocxTheme(options.format || profile?.cvFormat);
   const {
     developer_title,
     role_title,
@@ -99,7 +118,7 @@ async function generateDocx(cvData, profile) {
           text: name,
           bold: true,
           size: 52,
-          color: COLORS.primary,
+          color: theme.primary,
           font: 'Calibri',
         }),
       ],
@@ -112,7 +131,7 @@ async function generateDocx(cvData, profile) {
         new TextRun({
           text: developer_title,
           size: 24,
-          color: COLORS.accent,
+          color: theme.accent,
           font: 'Calibri',
           bold: true,
         }),
@@ -126,7 +145,7 @@ async function generateDocx(cvData, profile) {
         new TextRun({
           text: contactParts.join('  |  '),
           size: 18,
-          color: COLORS.light,
+          color: theme.light,
           font: 'Calibri',
         }),
       ],
@@ -135,14 +154,14 @@ async function generateDocx(cvData, profile) {
 
   // Summary paragraphs
   const summarySection = [
-    sectionHeading('Professional Summary'),
+    sectionHeading('Professional Summary', theme),
     new Paragraph({
       spacing: { before: 80, after: 80 },
       children: [
         new TextRun({
           text: summary,
           size: 19,
-          color: COLORS.text,
+          color: theme.text,
           font: 'Calibri',
         }),
       ],
@@ -150,14 +169,14 @@ async function generateDocx(cvData, profile) {
   ];
 
   // Skills section
-  const skillsSection = [sectionHeading('Technical Skills')];
+  const skillsSection = [sectionHeading('Technical Skills', theme)];
   const skillsMap = skills instanceof Map ? skills : new Map(Object.entries(skills));
   for (const [category, items] of skillsMap) {
-    skillsSection.push(skillRow(category, items));
+    skillsSection.push(skillRow(category, items, theme));
   }
 
   // Experience section — company/role/date from profile.workExperiences, bullets from cv JSON
-  const expSection = [sectionHeading('Professional Experience')];
+  const expSection = [sectionHeading('Professional Experience', theme)];
 
   const workRows = workExperiences.length > 0
     ? workExperiences.map((w, i) => ({
@@ -178,36 +197,36 @@ async function generateDocx(cvData, profile) {
       new Paragraph({
         spacing: { before: 160, after: 60 },
         children: [
-          new TextRun({ text: role, bold: true, size: 21, color: COLORS.primary, font: 'Calibri' }),
+          new TextRun({ text: role, bold: true, size: 21, color: theme.primary, font: 'Calibri' }),
           ...(company ? [
-            new TextRun({ text: '  |  ', size: 19, color: COLORS.light, font: 'Calibri' }),
-            new TextRun({ text: company, bold: true, size: 19, color: COLORS.accent, font: 'Calibri' }),
+            new TextRun({ text: '  |  ', size: 19, color: theme.light, font: 'Calibri' }),
+            new TextRun({ text: company, bold: true, size: 19, color: theme.accent, font: 'Calibri' }),
           ] : []),
-          ...(date ? [new TextRun({ text: `    ${date}`, size: 18, color: COLORS.light, font: 'Calibri' })] : []),
+          ...(date ? [new TextRun({ text: `    ${date}`, size: 18, color: theme.light, font: 'Calibri' })] : []),
         ],
       })
     );
-    for (const point of bullets) expSection.push(bullet(point));
+    for (const point of bullets) expSection.push(bullet(point, theme));
   }
 
   // Education section
   const educationSection = [];
   if (education.length > 0) {
-    educationSection.push(sectionHeading('Education'));
+    educationSection.push(sectionHeading('Education', theme));
     for (const edu of education) {
       const years = [edu.startYear, edu.endYear].filter(Boolean).join(' – ');
       educationSection.push(
         new Paragraph({
           spacing: { before: 120, after: 30 },
           children: [
-            new TextRun({ text: edu.institution, bold: true, size: 20, color: COLORS.primary, font: 'Calibri' }),
-            ...(years ? [new TextRun({ text: `  (${years})`, size: 18, color: COLORS.light, font: 'Calibri' })] : []),
+            new TextRun({ text: edu.institution, bold: true, size: 20, color: theme.primary, font: 'Calibri' }),
+            ...(years ? [new TextRun({ text: `  (${years})`, size: 18, color: theme.light, font: 'Calibri' })] : []),
           ],
         }),
         new Paragraph({
           spacing: { before: 0, after: 60 },
           children: [
-            new TextRun({ text: [edu.degree, edu.field].filter(Boolean).join(', '), size: 19, color: COLORS.text, font: 'Calibri' }),
+            new TextRun({ text: [edu.degree, edu.field].filter(Boolean).join(', '), size: 19, color: theme.text, font: 'Calibri' }),
           ],
         })
       );
@@ -217,15 +236,15 @@ async function generateDocx(cvData, profile) {
   // Certifications section
   const certSection = [];
   if (certifications.length > 0) {
-    certSection.push(sectionHeading('Certifications'));
+    certSection.push(sectionHeading('Certifications', theme));
     for (const cert of certifications) {
       const meta = [cert.issuer, cert.year].filter(Boolean).join(', ');
       certSection.push(
         new Paragraph({
           spacing: { before: 80, after: 40 },
           children: [
-            new TextRun({ text: cert.name, bold: true, size: 19, color: COLORS.primary, font: 'Calibri' }),
-            ...(meta ? [new TextRun({ text: `  — ${meta}`, size: 18, color: COLORS.light, font: 'Calibri' })] : []),
+            new TextRun({ text: cert.name, bold: true, size: 19, color: theme.primary, font: 'Calibri' }),
+            ...(meta ? [new TextRun({ text: `  — ${meta}`, size: 18, color: theme.light, font: 'Calibri' })] : []),
           ],
         })
       );
@@ -236,7 +255,7 @@ async function generateDocx(cvData, profile) {
     styles: {
       default: {
         document: {
-          run: { font: 'Calibri', size: 20, color: COLORS.text },
+          run: { font: 'Calibri', size: 20, color: theme.text },
         },
       },
     },

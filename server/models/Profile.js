@@ -22,6 +22,8 @@ const WorkExperienceSchema = new mongoose.Schema({
   current: { type: Boolean, default: false },
 }, { _id: false });
 
+const CV_FORMATS = ['classic', 'minimal', 'executive'];
+
 /** Drives OpenAI CV JSON shape / counts for this profile (Profiles tab → “CV generation”). */
 const CvGenerationSchema = new mongoose.Schema(
   {
@@ -59,6 +61,10 @@ const ProfileSchema = new mongoose.Schema(
     workExperiences: { type: [WorkExperienceSchema], default: [] },
     education: { type: [EducationSchema], default: [] },
     certifications: { type: [CertificationSchema], default: [] },
+    /** Export layout style used for DOCX/PDF generation. */
+    cvFormat: { type: String, enum: CV_FORMATS, default: 'classic' },
+    /** Selected template for PDF rendering (optional). */
+    templateId: { type: 'ObjectId', ref: 'Template', default: null },
     cvGeneration: { type: CvGenerationSchema, default: () => ({}) },
   },
   { timestamps: true }
