@@ -3,6 +3,25 @@ const Profile = require('../models/Profile');
 const { generateDocx } = require('../services/docxService');
 const { generatePdf } = require('../services/pdfService');
 const { generateCvJsonWithOpenAI } = require('../services/openaiCvService');
+const path = require('path');
+const fs = require('fs/promises');
+
+function safeBaseName(name) {
+  const s = String(name || '').trim() || 'CV';
+  return s
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
+async function saveDownloadCopy({ buffer, filename }) {
+  // Save into project-root ./cv (one level above /server)
+  const outDir = path.join(__dirname, '..', '..', 'cv');
+  await fs.mkdir(outDir, { recursive: true });
+  const outPath = path.join(outDir, filename);
+  await fs.writeFile(outPath, buffer);
+}
 
 function rawProfileIdRef(ref) {
   if (ref == null) return null;
@@ -145,9 +164,8 @@ exports.downloadDocx = async (req, res) => {
     const format = tpl && tpl.kind === 'built_in' && tpl.builtInKey ? tpl.builtInKey : profile.cvFormat;
 
     const buffer = await generateDocx(cv.toObject(), profile.toObject(), { format });
-    const filename = `CV_${cv.company_name}_${cv.role_title}.docx`
-      .replace(/[^a-z0-9_\-. ]/gi, '_')
-      .replace(/\s+/g, '_');
+    const filename = `${safeBaseName(profile.name)}.docx`;
+    await saveDownloadCopy({ buffer, filename });
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -171,12 +189,11 @@ exports.downloadPdf = async (req, res) => {
       format: profile.cvFormat,
       template: tpl,
     });
-    const filename = `CV_${cv.company_name}_${cv.role_title}.pdf`
-      .replace(/[^a-z0-9_\-. ]/gi, '_')
-      .replace(/\s+/g, '_');
+    const filename = `${safeBaseName(profile.name)}.pdf`;
+    await saveDownloadCopy({ buffer, filename });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', buffer.length);
 
     res.end(buffer);
