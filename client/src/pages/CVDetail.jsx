@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { getCV, deleteCV, getProfileById, updateCVStatus } from '../api.js';
+import { getCV, deleteCV, getProfileById, updateCVStatus, cvChat } from '../api.js';
 import { profileRefToIdString } from '../utils/profileRef.js';
 import CVPreview from '../components/CVPreview.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -59,6 +59,10 @@ export default function CVDetail() {
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [aiMessages, setAiMessages] = useState([]);
+  const [aiInput, setAiInput] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
 
   useEffect(() => {
     getCV(id)
@@ -103,6 +107,27 @@ export default function CVDetail() {
       navigate(isAdmin ? '/admin' : '/');
     } catch (err) {
       alert(err.response?.data?.error || err.message);
+    }
+  }
+
+  async function handleAskAi(e) {
+    e?.preventDefault?.();
+    setAiError('');
+    const q = String(aiInput || '').trim();
+    if (!q) return;
+
+    const nextHistory = [...aiMessages, { role: 'user', content: q }];
+    setAiMessages(nextHistory);
+    setAiInput('');
+    setAiLoading(true);
+    try {
+      const resp = await cvChat({ cvId: id, message: q, history: nextHistory });
+      const answer = String(resp?.answer || '').trim() || '(No response)';
+      setAiMessages((prev) => [...prev, { role: 'assistant', content: answer }]);
+    } catch (err) {
+      setAiError(err.response?.data?.error || err.message || 'AI request failed');
+    } finally {
+      setAiLoading(false);
     }
   }
 
@@ -231,6 +256,71 @@ export default function CVDetail() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* AI assistant */}
+      <div className="bg-white rounded-2xl shadow border border-gray-200 p-6 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-primary">AI Assistant</h2>
+            <p className="text-xs text-gray-500">Uses this CV + the saved job description.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setAiMessages([]); setAiError(''); }}
+            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600"
+          >
+            Clear
+          </button>
+        </div>
+
+        {aiError ? (
+          <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
+            {aiError}
+          </div>
+        ) : null}
+
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 h-64 overflow-auto space-y-2">
+          {aiMessages.length === 0 ? (
+            <p className="text-sm text-gray-500">
+              Try: “Rewrite my summary for this JD”, “List missing keywords”, “Improve bullet points for this role”.
+            </p>
+          ) : (
+            aiMessages.map((m, idx) => (
+              <div
+                key={idx}
+                className={`text-sm leading-relaxed rounded-lg px-3 py-2 border ${
+                  m.role === 'assistant'
+                    ? 'bg-white border-gray-200 text-gray-800'
+                    : 'bg-blue-50 border-blue-100 text-blue-900'
+                }`}
+              >
+                <div className="text-[11px] uppercase tracking-wide opacity-70 mb-1">
+                  {m.role === 'assistant' ? 'Assistant' : 'You'}
+                </div>
+                <div className="whitespace-pre-wrap">{m.content}</div>
+              </div>
+            ))
+          )}
+          {aiLoading ? <div className="text-sm text-gray-500 px-2 py-1">Thinking…</div> : null}
+        </div>
+
+        <form onSubmit={handleAskAi} className="flex gap-2">
+          <input
+            value={aiInput}
+            onChange={(e) => setAiInput(e.target.value)}
+            placeholder="Ask something…"
+            className="flex-1 px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            disabled={aiLoading}
+          />
+          <button
+            type="submit"
+            disabled={aiLoading || !String(aiInput || '').trim()}
+            className="bg-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-900 disabled:opacity-50 transition font-medium"
+          >
+            Send
+          </button>
+        </form>
       </div>
 
       {/* Full CV Preview */}

@@ -159,7 +159,7 @@ exports.downloadDocx = async (req, res) => {
     const cv = await CV.findOne({ _id: req.params.id, ...ownerFilter(req) });
     if (!cv) return res.status(404).json({ error: 'CV not found' });
     const profile = await Profile.findById(rawProfileIdRef(cv.profileId)).populate('templateId');
-    if (!profile) throw new Error('Profile not found. Please select a valid profile.');
+    if (!profile) return res.status(404).json({ error: 'Profile not found for this CV' });
     const tpl = profile.templateId && typeof profile.templateId === 'object' ? profile.templateId.toObject() : null;
     const format = tpl && tpl.kind === 'built_in' && tpl.builtInKey ? tpl.builtInKey : profile.cvFormat;
 
@@ -172,7 +172,7 @@ exports.downloadDocx = async (req, res) => {
     res.send(buffer);
   } catch (err) {
     console.error('downloadDocx:', err?.stack || err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message || 'DOCX download failed' });
   }
 };
 
@@ -182,7 +182,7 @@ exports.downloadPdf = async (req, res) => {
     const cv = await CV.findOne({ _id: req.params.id, ...ownerFilter(req) });
     if (!cv) return res.status(404).json({ error: 'CV not found' });
     const profile = await Profile.findById(rawProfileIdRef(cv.profileId)).populate('templateId');
-    if (!profile) throw new Error('Profile not found. Please select a valid profile.');
+    if (!profile) return res.status(404).json({ error: 'Profile not found for this CV' });
     const tpl = profile.templateId && typeof profile.templateId === 'object' ? profile.templateId.toObject() : null;
 
     const buffer = await generatePdf(cv.toObject(), profile.toObject(), {
@@ -199,6 +199,6 @@ exports.downloadPdf = async (req, res) => {
     res.end(buffer);
   } catch (err) {
     console.error('downloadPdf:', err?.stack || err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message || 'PDF download failed' });
   }
 };

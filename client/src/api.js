@@ -26,6 +26,10 @@ export const updateCVStatus = (id, status) =>
 export const downloadDocxUrl = (id) => `/api/cv/${id}/download/docx`;
 export const downloadPdfUrl = (id) => `/api/cv/${id}/download/pdf`;
 
+// AI assistant
+export const cvChat = ({ cvId, message, history }) =>
+  api.post('/ai/cv-chat', { cvId, message, history }).then((r) => r.data);
+
 // Profile
 export const listProfiles = () => api.get('/profile').then((r) => r.data);
 export const getProfileById = (id) => api.get(`/profile/${id}`).then((r) => r.data);

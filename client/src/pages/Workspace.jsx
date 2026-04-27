@@ -222,6 +222,7 @@ export default function Workspace() {
   const fileInputRef = useRef(null);
 
   const [profiles, setProfiles] = useState([]);
+  const [downloadingExtension, setDownloadingExtension] = useState(false);
 
   const [savedLinks, setSavedLinks] = useState([]);
   const [loadingSavedLinks, setLoadingSavedLinks] = useState(true);
@@ -379,6 +380,38 @@ export default function Workspace() {
   function handleFileInput(e) {
     addFiles(e.target.files);
     e.target.value = '';
+  }
+
+  async function downloadExtensionZip() {
+    setDownloadingExtension(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/extension/cv-builder-zip', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        let msg = text || `HTTP ${res.status}`;
+        try {
+          const j = text ? JSON.parse(text) : null;
+          if (j?.error) msg = j.error;
+        } catch {
+          // ignore
+        }
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'extension-cv-builder.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingExtension(false);
+    }
   }
 
   const profileLabelById = useMemo(
@@ -734,7 +767,18 @@ export default function Workspace() {
           </div>
         </div>
       )}
-      <h2 className="text-xl font-bold text-primary">Workspace</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-bold text-primary">Workspace</h2>
+        <button
+          type="button"
+          onClick={downloadExtensionZip}
+          disabled={downloadingExtension}
+          className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white text-sm font-semibold px-4 py-2 hover:bg-gray-50 disabled:opacity-50"
+          title="Download the Chrome extension folder as a ZIP"
+        >
+          {downloadingExtension ? 'Downloading…' : 'Download Chrome Extension'}
+        </button>
+      </div>
 
       {/* Upload files + manual link (stacked) */}
       <div className="bg-white rounded-2xl shadow p-5">
