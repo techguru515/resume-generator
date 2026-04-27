@@ -285,4 +285,4 @@ Built as a **production-ready full-stack project** demonstrating:
 
 ## 📄 License
 
-wong && lspli
+Skydev
