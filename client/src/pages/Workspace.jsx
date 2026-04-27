@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { listProfiles, listCVs, listWorkspaceLinks, saveWorkspaceLinks, deleteWorkspaceLinks, generateCvsForWorkspaceLinks, setProfileForWorkspaceLinks, setJobDescriptionForWorkspaceLink } from '../api.js';
+import { listProfiles, listCVs, deleteCV, listWorkspaceLinks, saveWorkspaceLinks, deleteWorkspaceLinks, generateCvsForWorkspaceLinks, setProfileForWorkspaceLinks, setJobDescriptionForWorkspaceLink } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { profileRefToIdString, profileRefToLabel } from '../utils/profileRef.js';
@@ -232,6 +232,7 @@ export default function Workspace() {
 
   const [cvList, setCvList] = useState([]);
   const [loadingCvs, setLoadingCvs] = useState(true);
+  const [deletingCvId, setDeletingCvId] = useState('');
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -309,6 +310,21 @@ export default function Workspace() {
       .catch(() => setCvList([]))
       .finally(() => setLoadingCvs(false));
   }, [user]);
+
+  async function deleteCvById(cvId) {
+    const id = String(cvId || '');
+    if (!id) return;
+    setDeletingCvId(id);
+    try {
+      await deleteCV(id);
+      const fresh = await listCVs();
+      setCvList(Array.isArray(fresh) ? fresh : []);
+    } catch (err) {
+      setLinksError(err.response?.data?.error || err.message || 'Failed to delete CV');
+    } finally {
+      setDeletingCvId('');
+    }
+  }
 
   const addFiles = useCallback((fileList) => {
     setLinksError('');
@@ -978,6 +994,7 @@ export default function Workspace() {
                           const id = String(row.key);
                           const isOpen = jdOpenLinkId === id;
                           const jd = jdByLinkId[id] || '';
+                          const hasJd = String(jd || '').trim().length > 0;
 
                           return [
                             (
@@ -1001,18 +1018,27 @@ export default function Workspace() {
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 min-w-0">
+                                  {(() => {
+                                    const pid = profileRefToIdString(row.profileId);
+                                    const hasProfile = Boolean(pid);
+                                    const cls = hasProfile
+                                      ? 'border-emerald-200 bg-emerald-50/60 text-emerald-900 focus:ring-emerald-300'
+                                      : 'border-red-200 bg-red-50/60 text-red-800 focus:ring-red-300';
+                                    return (
                                   <select
-                                    value={profileRefToIdString(row.profileId)}
+                                    value={pid}
                                     onChange={(e) => setProfileForLinkIds({ ids: [row.key], profileId: e.target.value })}
                                     disabled={deletingLinks || generatingLinks || updatingProfileLinkIds.includes(String(row.key))}
-                                    className="w-full max-w-[170px] cursor-pointer appearance-none border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-accent [&::-ms-expand]:hidden"
-                                    title="Set profile for this link"
+                                    className={`w-full max-w-[170px] cursor-pointer appearance-none border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 [&::-ms-expand]:hidden ${cls}`}
+                                    title={hasProfile ? 'Profile selected' : 'No profile selected'}
                                   >
                                     <option value="">No profile</option>
                                     {profiles.map((p) => (
                                       <option key={p._id} value={String(p._id)}>{p.label}</option>
                                     ))}
                                   </select>
+                                    );
+                                  })()}
                                 </td>
                                 <td className="px-4 py-3 min-w-0" title={row.url}>
                                   <a
@@ -1050,8 +1076,12 @@ export default function Workspace() {
                                     type="button"
                                     onClick={() => toggleJdForRow(row)}
                                     disabled={deletingLinks}
-                                    className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                                    title="Add job description for this link"
+                                    className={`inline-flex items-center rounded-lg px-2.5 py-1.5 text-xs font-semibold border transition disabled:opacity-50 ${
+                                      hasJd
+                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                                        : 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+                                    }`}
+                                    title={hasJd ? 'Job description saved' : 'Missing job description'}
                                   >
                                     {isOpen ? 'Hide' : 'JD'}
                                   </button>
@@ -1269,6 +1299,7 @@ export default function Workspace() {
                       <th className="px-4 py-3">Profile</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3 whitespace-nowrap">Created</th>
+                      <th className="px-3 py-3 w-10" aria-label="Delete CV" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -1295,6 +1326,18 @@ export default function Workspace() {
                             {cv.createdAt
                               ? new Date(cv.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
                               : '—'}
+                          </td>
+                          <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              disabled={!!deletingCvId}
+                              onClick={() => deleteCvById(cv._id)}
+                              className="inline-flex items-center justify-center rounded-md p-1 text-red-600 hover:bg-red-50 hover:text-red-800 disabled:opacity-50"
+                              title="Delete this CV"
+                              aria-label="Delete this CV"
+                            >
+                              <TrashIcon className="w-3.5 h-3.5" />
+                            </button>
                           </td>
                         </tr>
                       );

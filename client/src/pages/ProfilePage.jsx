@@ -138,6 +138,7 @@ export default function ProfilePage() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
+  const [expandedProfileIds, setExpandedProfileIds] = useState(() => new Set());
   const [form, setForm] = useState(() => emptyFormState());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -247,6 +248,17 @@ export default function ProfilePage() {
     });
     setEditing(profile._id);
     setError('');
+  }
+
+  function toggleExpanded(profileId) {
+    const id = String(profileId || '');
+    if (!id) return;
+    setExpandedProfileIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   function cancelEdit() { setEditing(null); setForm(emptyFormState()); setError(''); }
@@ -439,11 +451,24 @@ export default function ProfilePage() {
                   )}
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleExpanded(p._id)}
+                    className="rounded-lg border border-gray-200 px-3 py-1 text-xs text-gray-600 transition hover:bg-gray-50"
+                    aria-expanded={expandedProfileIds.has(String(p._id))}
+                    aria-controls={`profile-details-${p._id}`}
+                  >
+                    {expandedProfileIds.has(String(p._id)) ? 'Hide details' : 'Details'}
+                  </button>
                   <button type="button" onClick={() => startEdit(p)} className="rounded-lg border border-accent px-3 py-1 text-xs text-accent transition hover:bg-blue-50">Edit</button>
                   <button type="button" onClick={() => handleDelete(p._id)} className="rounded-lg border border-red-200 px-3 py-1 text-xs text-red-400 transition hover:bg-red-50">Delete</button>
                 </div>
               </div>
-              <ProfileCareerAndEducation profile={p} />
+              {expandedProfileIds.has(String(p._id)) && (
+                <div id={`profile-details-${p._id}`}>
+                  <ProfileCareerAndEducation profile={p} />
+                </div>
+              )}
             </div>
           ))}
         </div>

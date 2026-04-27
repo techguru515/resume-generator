@@ -1,6 +1,6 @@
-# 🚀 CV Builder – MERN Stack Application
+# 🚀 Resume Generator – MERN Stack Application
 
-A full-stack CV management platform built with the **MERN stack** that allows users to create, manage, and track job applications with profile-based CV generation, admin approval workflow, and export to **PDF/DOCX**.
+A full-stack CV management platform built with the **MERN stack** that lets users create, manage, and track job applications with profile-based CV generation, admin approval workflow, and export to **PDF/DOCX**.
 
 ---
 
@@ -15,12 +15,21 @@ A full-stack CV management platform built with the **MERN stack** that allows us
 * 📝 Create CV with profile selection
 * 👀 Live CV preview (fully merged with profile data)
 * 📥 Download CV as **PDF** and **DOCX**
+* 🎨 Resume templates (per profile, 3 options):
+
+  * Classic
+  * Executive (Two-column)
+  * Executive (Color)
 * 📊 Dashboard grouped by profile with pagination
 * 🔗 Store and view job links
 * 🧭 Track application status:
 
   * Saved / Applied / Interview / Offer / Rejected
 * 🧩 Drag & drop Kanban board (Progress page)
+* ✅ Workspace link table status indicators:
+
+  * JD button is **green** when JD exists, **red** when missing
+  * Profile selector is **green** when profile is selected, **red** when missing
 
 ---
 
@@ -59,6 +68,7 @@ A full-stack CV management platform built with the **MERN stack** that allows us
 * Puppeteer (PDF generation)
 * docx (DOCX generation)
 * OpenAI API (draft CV content from job description + profile)
+* Handlebars (DB-backed PDF templates)
 
 ### Frontend
 
@@ -91,6 +101,8 @@ CV_builder/
 │   │   ├── context/
 │   │   └── api.js
 │   └── vite.config.js
+│
+└── cv/                 # server-side saved copies of downloads (created automatically)
 ```
 
 ---
@@ -111,6 +123,9 @@ ADMIN_PASSWORD=secure_password
 OPENAI_API_KEY=sk-...
 # OPENAI_MODEL=gpt-4o-mini
 # OPENAI_MODEL_EXTRACT=gpt-4o-mini
+
+# Optional: use a system Chrome/Chromium for PDF generation (Windows)
+# PUPPETEER_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe"
 ```
 
 ---
@@ -164,7 +179,7 @@ npm run dev
 
 ### 4. Open app
 
-👉 http://127.0.0.1:3000
+👉 `http://127.0.0.1:3000` (Vite may choose `3001` if `3000` is in use)
 
 ---
 
@@ -191,6 +206,8 @@ npm run dev
 
    * DOCX → `docx` library
    * PDF → Puppeteer
+
+> While generating, the UI shows a full-screen loading overlay and disables interactions until the request completes.
 
 ---
 
@@ -250,8 +267,9 @@ password: secure_password
 
 ## 📌 Notes
 
-* Browser downloads cannot control folder location (security limitation)
-* For folder-based downloads → use ZIP generation on backend
+* Browser downloads cannot control folder location (security limitation).
+* When a user downloads a CV, the backend also saves a copy in the project root `cv/` folder.
+* Downloaded filenames are based on the **profile name** (e.g. `John Doe.pdf`, `John Doe.docx`).
 
 ---
 

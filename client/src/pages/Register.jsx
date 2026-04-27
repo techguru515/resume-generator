@@ -28,7 +28,7 @@ export default function Register() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-100">
       <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-primary mb-6 text-center">CV Builder</h1>
+        <h1 className="text-2xl font-bold text-primary mb-6 text-center">Resume Generator</h1>
         <h2 className="text-lg font-semibold text-gray-700 mb-4">Create Account</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
