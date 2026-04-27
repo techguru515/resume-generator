@@ -43,3 +43,6 @@ coverage/
 
 # Optional local Mongo (if you ever add a data volume path here)
 data/
+
+#generated files
+cv/

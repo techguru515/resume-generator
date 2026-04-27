@@ -1,5 +1,39 @@
 const puppeteer = require('puppeteer');
 const { PDFDocument } = require('pdf-lib');
+const { buildResumeViewModel, renderHandlebarsTemplate } = require('./templateRenderService');
+
+function htmlEscape(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function htmlEscapeWithBold(s) {
+  // Supports **bold** segments (common in AI output), escapes everything else.
+  const src = String(s ?? '');
+  const parts = src.split('**');
+  let out = '';
+  for (let i = 0; i < parts.length; i++) {
+    const escaped = htmlEscape(parts[i]);
+    out += i % 2 === 1 ? `<strong>${escaped}</strong>` : escaped;
+  }
+  return out;
+}
+
+function normalizeUrl(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  return s.replace(/^https?:\/\//i, '').replace(/^www\./i, '');
+}
+
+function formatDate(raw) {
+  // Keep the user-entered text as-is (e.g. "Jan 2020", "2021", "Present")
+  const s = String(raw ?? '').trim();
+  return s || '';
+}
 
 function buildMetadata(cvData, profile) {
   const skillsMap = cvData.skills instanceof Map ? cvData.skills : new Map(Object.entries(cvData.skills || {}));
@@ -22,6 +56,184 @@ function buildMetadata(cvData, profile) {
       ...certNames,
     ].filter(Boolean).join(', '),
   };
+}
+
+function buildExecutiveHtml(cvData, profile) {
+  const { developer_title, summary, skills, experiences } = cvData;
+  const {
+    name,
+    email,
+    phone,
+    location,
+    linkedin,
+    github,
+    website,
+    education = [],
+    certifications = [],
+    workExperiences = [],
+  } = profile;
+
+  const meta = buildMetadata(cvData, profile);
+
+  const contactParts = [];
+  if (email) contactParts.push(`<span>${htmlEscape(email)}</span>`);
+  if (phone) contactParts.push(`<span>${htmlEscape(phone)}</span>`);
+  if (location) contactParts.push(`<span>${htmlEscape(location)}</span>`);
+  if (linkedin) {
+    const u = normalizeUrl(linkedin);
+    if (u) contactParts.push(`<span><a href="https://${htmlEscape(u)}">LinkedIn</a></span>`);
+  }
+  if (github) {
+    const u = normalizeUrl(github);
+    if (u) contactParts.push(`<span><a href="https://${htmlEscape(u)}">GitHub</a></span>`);
+  }
+  if (website) {
+    const u = normalizeUrl(website);
+    if (u) contactParts.push(`<span><a href="https://${htmlEscape(u)}">Portfolio</a></span>`);
+  }
+
+  const workRows = workExperiences.length > 0
+    ? workExperiences.map((w, i) => ({
+        title: w.role,
+        company: w.company,
+        start_date: w.startDate,
+        end_date: w.current ? 'Present' : w.endDate,
+        location: '',
+        bullet_points: experiences?.[`experience${i + 1}`] || [],
+      }))
+    : [1, 2, 3].map((i) => ({
+        title: experiences?.[`role${i}`],
+        company: experiences?.[`company${i}`],
+        start_date: (experiences?.[`date${i}`] || '').split('–')[0]?.trim() || '',
+        end_date: (experiences?.[`date${i}`] || '').split('–')[1]?.trim() || '',
+        location: '',
+        bullet_points: experiences?.[`experience${i}`] || [],
+      })).filter((r) => r.title);
+
+  const expHtml = workRows.length
+    ? `
+  <section>
+    <h2>Professional Experience</h2>
+    ${workRows.map((exp) => `
+    <div class="entry">
+      <div class="entry-row">
+        <h3>${htmlEscape(exp.title)}</h3>
+        <span class="dates">${htmlEscape(formatDate(exp.start_date))} &ndash; ${htmlEscape(formatDate(exp.end_date))}</span>
+      </div>
+      <p class="company">${htmlEscape(exp.company)}${exp.location ? ` &bull; ${htmlEscape(exp.location)}` : ''}</p>
+      ${Array.isArray(exp.bullet_points) && exp.bullet_points.length ? `
+      <ul>
+        ${exp.bullet_points.map((b) => `<li>${htmlEscapeWithBold(b)}</li>`).join('')}
+      </ul>` : ''}
+    </div>`).join('')}
+  </section>`
+    : '';
+
+  const eduHtml = education.length
+    ? `
+      <section>
+        <h2>Education</h2>
+        ${education.map((edu) => `
+        <div class="entry">
+          <h3>${htmlEscape(edu.degree)}${edu.field ? ` &mdash; ${htmlEscape(edu.field)}` : ''}</h3>
+          <p class="company">${htmlEscape(edu.institution)}</p>
+          <span class="dates">${htmlEscape(formatDate(edu.startYear))} &ndash; ${htmlEscape(formatDate(edu.endYear))}</span>
+        </div>`).join('')}
+      </section>`
+    : '';
+
+  const skillsMap = skills instanceof Map ? skills : new Map(Object.entries(skills || {}));
+  const skillsHighlighted = Array.from(new Set(Array.from(skillsMap.values()).flat().map((x) => String(x).trim()).filter(Boolean))).slice(0, 28);
+  const skillsHtml = skillsHighlighted.length
+    ? `
+      <section>
+        <h2>Core Competencies</h2>
+        <div class="tags">
+          ${skillsHighlighted.map((s) => `<span class="tag">${htmlEscape(s)}</span>`).join('')}
+        </div>
+      </section>`
+    : '';
+
+  const certHtml = certifications.length
+    ? `
+      <section>
+        <h2>Certifications</h2>
+        ${certifications.map((c) => `
+        <div class="cert"><strong>${htmlEscape(c.name)}</strong>${c.issuer ? ` &mdash; ${htmlEscape(c.issuer)}` : ''}</div>`).join('')}
+      </section>`
+    : '';
+
+  const titleHtml = htmlEscape(`${name} - Resume`);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${titleHtml}</title>
+<meta name="author" content="${htmlEscape(meta.author)}"/>
+<meta name="subject" content="${htmlEscape(meta.subject)}"/>
+<meta name="keywords" content="${htmlEscape(meta.keywords)}"/>
+<meta name="description" content="${htmlEscape(meta.subject)}"/>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0; font-family: 'Calibri', 'Segoe UI', Arial, sans-serif; color: #111827; }
+  .resume { padding: 0; }
+  header { text-align: left; margin-bottom: 14px; }
+  h1 { margin: 0; font-size: 26pt; letter-spacing: 0.2px; }
+  .title { margin: 6px 0 10px; font-size: 11.5pt; font-weight: 700; color: #111827; }
+  .contact-row { display: flex; flex-wrap: wrap; gap: 10px 14px; font-size: 9.5pt; color: #374151; }
+  .contact-row a { color: #111827; text-decoration: none; border-bottom: 1px solid #D1D5DB; }
+  section { margin: 12px 0; }
+  h2 { margin: 0 0 6px; font-size: 11pt; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #E5E7EB; padding-bottom: 4px; }
+  .summary { margin: 0; font-size: 10pt; line-height: 1.5; color: #111827; }
+  .entry { padding: 8px 0; }
+  .entry-row { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; }
+  .entry-row h3 { margin: 0; font-size: 10.5pt; font-weight: 700; color: #111827; }
+  .dates { font-size: 9pt; color: #4B5563; white-space: nowrap; }
+  .company { margin: 2px 0 0; font-size: 9.5pt; color: #374151; }
+  ul { margin: 6px 0 0; padding-left: 18px; }
+  li { margin: 0 0 3px; font-size: 9.5pt; line-height: 1.45; color: #111827; }
+  .two-col-bottom { display: grid; grid-template-columns: 1.2fr 0.9fr; gap: 18px; margin-top: 8px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { border: 1px solid #E5E7EB; background: #F9FAFB; padding: 4px 8px; border-radius: 999px; font-size: 9pt; color: #111827; }
+  .cert { font-size: 9.5pt; margin: 6px 0 0; color: #111827; }
+  /* ATS keyword block: hidden from human view, readable by parsers */
+  .ats { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; font-size:1px; color:white; }
+</style>
+</head>
+<body>
+<div class="resume">
+  <header>
+    <h1>${htmlEscape(name)}</h1>
+    ${developer_title ? `<p class="title">${htmlEscape(developer_title)}</p>` : ''}
+    <div class="contact-row">
+      ${contactParts.join('')}
+    </div>
+  </header>
+
+  ${summary ? `
+  <section>
+    <h2>Executive Summary</h2>
+    <p class="summary">${htmlEscapeWithBold(summary)}</p>
+  </section>` : ''}
+
+  ${expHtml}
+
+  <div class="two-col-bottom">
+    <div>
+      ${eduHtml}
+    </div>
+    <div>
+      ${skillsHtml}
+      ${certHtml}
+    </div>
+  </div>
+
+  <div class="ats">${htmlEscape(meta.keywords)}</div>
+</div>
+</body>
+</html>`;
 }
 
 function buildHtml(cvData, profile) {
@@ -91,6 +303,27 @@ function buildHtml(cvData, profile) {
       }).join('')
     : '';
 
+  const formatRaw = String(profile?.cvFormat || '').toLowerCase();
+  if (formatRaw === 'executive') return buildExecutiveHtml(cvData, profile);
+
+  const format = formatRaw === 'minimal' ? 'minimal' : 'classic';
+  const theme =
+    format === 'minimal'
+      ? {
+          primary: '#111111',
+          accent: '#111111',
+          light: '#555555',
+          rule: '#E5E7EB',
+          showRule: false,
+        }
+      : {
+          primary: '#1a3a5c',
+          accent: '#2e86c1',
+          light: '#666666',
+          rule: '#2e86c1',
+          showRule: true,
+        };
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -107,44 +340,44 @@ function buildHtml(cvData, profile) {
     font-size: 10pt;
     color: #2c2c2c;
     background: #fff;
-    padding: 36px 48px;
+    padding: 0;
     line-height: 1.45;
   }
   .header { text-align: center; margin-bottom: 10px; }
-  .header h1 { font-size: 26pt; color: #1a3a5c; font-weight: bold; margin-bottom: 4px; }
-  .header .dev-title { font-size: 12pt; color: #2e86c1; font-weight: bold; margin-bottom: 6px; }
-  .header .contact { font-size: 9pt; color: #666; }
+  .header h1 { font-size: ${format === 'minimal' ? '24pt' : '26pt'}; color: ${theme.primary}; font-weight: bold; margin-bottom: 4px; }
+  .header .dev-title { font-size: 12pt; color: ${theme.accent}; font-weight: bold; margin-bottom: 6px; }
+  .header .contact { font-size: 9pt; color: ${theme.light}; }
   .section { margin-bottom: 12px; }
   .section-title {
     font-size: 11pt;
     font-weight: bold;
-    color: #1a3a5c;
+    color: ${theme.primary};
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    border-bottom: 2px solid #2e86c1;
+    border-bottom: ${theme.showRule ? `2px solid ${theme.rule}` : '0'};
     padding-bottom: 2px;
     margin-bottom: 6px;
   }
   .summary-text { font-size: 10pt; line-height: 1.5; }
   .skill-row { font-size: 9.5pt; margin-bottom: 3px; }
-  .skill-label { font-weight: bold; color: #1a3a5c; }
+  .skill-label { font-weight: bold; color: ${theme.primary}; }
   .role-block { margin-bottom: 10px; }
   .role-header { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; margin-bottom: 4px; }
   .role-left { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap; }
-  .role-title { font-size: 10.5pt; font-weight: bold; color: #1a3a5c; }
+  .role-title { font-size: 10.5pt; font-weight: bold; color: ${theme.primary}; }
   .role-sep { font-size: 9pt; color: #aaa; }
-  .role-company { font-size: 9.5pt; color: #2e86c1; font-weight: 600; }
-  .role-date { font-size: 9pt; color: #666; white-space: nowrap; }
+  .role-company { font-size: 9.5pt; color: ${theme.accent}; font-weight: 600; }
+  .role-date { font-size: 9pt; color: ${theme.light}; white-space: nowrap; }
   ul { padding-left: 18px; }
   li { font-size: 9.5pt; margin-bottom: 2.5px; }
   .edu-block { margin-bottom: 8px; }
   .edu-header { display: flex; justify-content: space-between; align-items: baseline; }
-  .edu-institution { font-weight: bold; color: #1a3a5c; font-size: 10pt; }
-  .edu-years { font-size: 9pt; color: #666; }
+  .edu-institution { font-weight: bold; color: ${theme.primary}; font-size: 10pt; }
+  .edu-years { font-size: 9pt; color: ${theme.light}; }
   .edu-degree { font-size: 9.5pt; color: #2c2c2c; margin-top: 1px; }
   .cert-row { font-size: 9.5pt; margin-bottom: 4px; }
-  .cert-name { font-weight: bold; color: #1a3a5c; }
-  .cert-meta { color: #666; }
+  .cert-name { font-weight: bold; color: ${theme.primary}; }
+  .cert-meta { color: ${theme.light}; }
 </style>
 </head>
 <body>
@@ -188,20 +421,46 @@ function buildHtml(cvData, profile) {
 </html>`;
 }
 
-async function generatePdf(cvData, profile) {
-  const html = buildHtml(cvData, profile);
-  const meta = buildMetadata(cvData, profile);
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+async function generatePdf(cvData, profile, options = {}) {
+  const prof = { ...(profile || {}) };
+  if (options && options.format) prof.cvFormat = options.format;
+
+  const tpl = options?.template || null;
+  if (tpl && tpl.kind === 'built_in' && tpl.builtInKey) {
+    prof.cvFormat = tpl.builtInKey;
+  }
+
+  const html =
+    tpl && tpl.kind === 'handlebars'
+      ? renderHandlebarsTemplate({ html: tpl.html, css: tpl.css }, buildResumeViewModel(cvData, prof))
+      : buildHtml(cvData, prof);
+  const meta = buildMetadata(cvData, prof);
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+      ],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+    });
+  } catch (e) {
+    const msg = e?.message || String(e);
+    throw new Error(
+      `PDF engine failed to start (Puppeteer/Chromium). ${msg}`
+    );
+  }
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0' });
     const puppeteerBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
-      margin: { top: '0', right: '0', bottom: '0', left: '0' },
+      // Real page margins apply on every page (fixes missing top space on page 2+).
+      margin: { top: '36px', right: '48px', bottom: '36px', left: '48px' },
       displayHeaderFooter: false,
     });
     const pdfDoc = await PDFDocument.load(puppeteerBuffer);
@@ -213,7 +472,7 @@ async function generatePdf(cvData, profile) {
     pdfDoc.setProducer(meta.author);
     return Buffer.from(await pdfDoc.save());
   } finally {
-    await browser.close();
+    if (browser) await browser.close();
   }
 }
 

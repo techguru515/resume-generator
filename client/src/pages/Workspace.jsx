@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { listProfiles, listCVs, listWorkspaceLinks, saveWorkspaceLinks, deleteWorkspaceLinks, generateCvsForWorkspaceLinks, setProfileForWorkspaceLinks, setJobDescriptionForWorkspaceLink } from '../api.js';
+import { listProfiles, listCVs, deleteCV, listWorkspaceLinks, saveWorkspaceLinks, deleteWorkspaceLinks, generateCvsForWorkspaceLinks, setProfileForWorkspaceLinks, setJobDescriptionForWorkspaceLink } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { profileRefToIdString, profileRefToLabel } from '../utils/profileRef.js';
@@ -222,6 +222,7 @@ export default function Workspace() {
   const fileInputRef = useRef(null);
 
   const [profiles, setProfiles] = useState([]);
+  const [downloadingExtension, setDownloadingExtension] = useState(false);
 
   const [savedLinks, setSavedLinks] = useState([]);
   const [loadingSavedLinks, setLoadingSavedLinks] = useState(true);
@@ -232,6 +233,7 @@ export default function Workspace() {
 
   const [cvList, setCvList] = useState([]);
   const [loadingCvs, setLoadingCvs] = useState(true);
+  const [deletingCvId, setDeletingCvId] = useState('');
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -310,6 +312,21 @@ export default function Workspace() {
       .finally(() => setLoadingCvs(false));
   }, [user]);
 
+  async function deleteCvById(cvId) {
+    const id = String(cvId || '');
+    if (!id) return;
+    setDeletingCvId(id);
+    try {
+      await deleteCV(id);
+      const fresh = await listCVs();
+      setCvList(Array.isArray(fresh) ? fresh : []);
+    } catch (err) {
+      setLinksError(err.response?.data?.error || err.message || 'Failed to delete CV');
+    } finally {
+      setDeletingCvId('');
+    }
+  }
+
   const addFiles = useCallback((fileList) => {
     setLinksError('');
     const arr = Array.from(fileList || []);
@@ -363,6 +380,38 @@ export default function Workspace() {
   function handleFileInput(e) {
     addFiles(e.target.files);
     e.target.value = '';
+  }
+
+  async function downloadExtensionZip() {
+    setDownloadingExtension(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/extension/cv-builder-zip', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        let msg = text || `HTTP ${res.status}`;
+        try {
+          const j = text ? JSON.parse(text) : null;
+          if (j?.error) msg = j.error;
+        } catch {
+          // ignore
+        }
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'extension-cv-builder.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingExtension(false);
+    }
   }
 
   const profileLabelById = useMemo(
@@ -703,8 +752,33 @@ export default function Workspace() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <h2 className="text-xl font-bold text-primary">Workspace</h2>
+    <div className="max-w-6xl mx-auto space-y-6 relative">
+      {generatingLinks && (
+        <div
+          className="fixed inset-0 z-50 bg-white/70 backdrop-blur-[2px] flex items-center justify-center"
+          role="status"
+          aria-live="polite"
+          aria-label="Generating resumes…"
+        >
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-gray-200 bg-white px-6 py-5 shadow-sm">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-violet-600" />
+            <p className="text-sm font-semibold text-primary">Generating resumes…</p>
+            <p className="text-xs text-gray-500">Please wait.</p>
+          </div>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-bold text-primary">Workspace</h2>
+        <button
+          type="button"
+          onClick={downloadExtensionZip}
+          disabled={downloadingExtension}
+          className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white text-sm font-semibold px-4 py-2 hover:bg-gray-50 disabled:opacity-50"
+          title="Download the Chrome extension folder as a ZIP"
+        >
+          {downloadingExtension ? 'Downloading…' : 'Download Chrome Extension'}
+        </button>
+      </div>
 
       {/* Upload files + manual link (stacked) */}
       <div className="bg-white rounded-2xl shadow p-5">
@@ -919,7 +993,6 @@ export default function Workspace() {
                       type="button"
                       disabled={deletingLinks}
                       onClick={() => {
-                        if (!window.confirm(`Delete ${selectedLinkIds.length} link(s)? This cannot be undone.`)) return;
                         removeLinksByIds(selectedLinkIds);
                       }}
                       className="inline-flex items-center gap-1.5 rounded-lg border-2 border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 shadow-sm hover:bg-red-50 disabled:opacity-50"
@@ -965,6 +1038,7 @@ export default function Workspace() {
                           const id = String(row.key);
                           const isOpen = jdOpenLinkId === id;
                           const jd = jdByLinkId[id] || '';
+                          const hasJd = String(jd || '').trim().length > 0;
 
                           return [
                             (
@@ -988,18 +1062,27 @@ export default function Workspace() {
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 min-w-0">
+                                  {(() => {
+                                    const pid = profileRefToIdString(row.profileId);
+                                    const hasProfile = Boolean(pid);
+                                    const cls = hasProfile
+                                      ? 'border-emerald-200 bg-emerald-50/60 text-emerald-900 focus:ring-emerald-300'
+                                      : 'border-red-200 bg-red-50/60 text-red-800 focus:ring-red-300';
+                                    return (
                                   <select
-                                    value={profileRefToIdString(row.profileId)}
+                                    value={pid}
                                     onChange={(e) => setProfileForLinkIds({ ids: [row.key], profileId: e.target.value })}
                                     disabled={deletingLinks || generatingLinks || updatingProfileLinkIds.includes(String(row.key))}
-                                    className="w-full max-w-[170px] cursor-pointer appearance-none border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-accent [&::-ms-expand]:hidden"
-                                    title="Set profile for this link"
+                                    className={`w-full max-w-[170px] cursor-pointer appearance-none border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 [&::-ms-expand]:hidden ${cls}`}
+                                    title={hasProfile ? 'Profile selected' : 'No profile selected'}
                                   >
                                     <option value="">No profile</option>
                                     {profiles.map((p) => (
                                       <option key={p._id} value={String(p._id)}>{p.label}</option>
                                     ))}
                                   </select>
+                                    );
+                                  })()}
                                 </td>
                                 <td className="px-4 py-3 min-w-0" title={row.url}>
                                   <a
@@ -1037,8 +1120,12 @@ export default function Workspace() {
                                     type="button"
                                     onClick={() => toggleJdForRow(row)}
                                     disabled={deletingLinks}
-                                    className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                                    title="Add job description for this link"
+                                    className={`inline-flex items-center rounded-lg px-2.5 py-1.5 text-xs font-semibold border transition disabled:opacity-50 ${
+                                      hasJd
+                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                                        : 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+                                    }`}
+                                    title={hasJd ? 'Job description saved' : 'Missing job description'}
                                   >
                                     {isOpen ? 'Hide' : 'JD'}
                                   </button>
@@ -1048,7 +1135,6 @@ export default function Workspace() {
                                     type="button"
                                     disabled={deletingLinks || generatingLinks}
                                     onClick={() => {
-                                      if (!window.confirm('Delete this link? This cannot be undone.')) return;
                                       removeLinksByIds([row.key]);
                                     }}
                                     className="inline-flex items-center justify-center rounded-md p-1 text-red-600 hover:bg-red-50 hover:text-red-800 disabled:opacity-50"
@@ -1257,6 +1343,7 @@ export default function Workspace() {
                       <th className="px-4 py-3">Profile</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3 whitespace-nowrap">Created</th>
+                      <th className="px-3 py-3 w-10" aria-label="Delete CV" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -1283,6 +1370,18 @@ export default function Workspace() {
                             {cv.createdAt
                               ? new Date(cv.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
                               : '—'}
+                          </td>
+                          <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              disabled={!!deletingCvId}
+                              onClick={() => deleteCvById(cv._id)}
+                              className="inline-flex items-center justify-center rounded-md p-1 text-red-600 hover:bg-red-50 hover:text-red-800 disabled:opacity-50"
+                              title="Delete this CV"
+                              aria-label="Delete this CV"
+                            >
+                              <TrashIcon className="w-3.5 h-3.5" />
+                            </button>
                           </td>
                         </tr>
                       );

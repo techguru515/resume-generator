@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { listProfiles, createProfile, updateProfile, deleteProfile } from '../api.js';
+import axios from 'axios';
+import { listProfiles, createProfile, updateProfile, deleteProfile, listTemplates, listCVs } from '../api.js';
+import { profileRefToIdString } from '../utils/profileRef.js';
 
 const EMPTY_WORK = { company: '', role: '', startDate: '', endDate: '', current: false };
 const EMPTY_EDU = { institution: '', degree: '', field: '', startYear: '', endYear: '' };
@@ -32,6 +34,8 @@ function emptyFormState() {
     workExperiences: [],
     education: [],
     certifications: [],
+    cvFormat: 'classic',
+    templateId: '',
     cvGeneration: defaultCvGeneration(),
   };
 }
@@ -134,11 +138,79 @@ export default function ProfilePage() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
+  const [expandedProfileIds, setExpandedProfileIds] = useState(() => new Set());
   const [form, setForm] = useState(() => emptyFormState());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [templates, setTemplates] = useState([]);
+  const [cvs, setCvs] = useState([]);
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => { fetchProfiles(); }, []);
+  useEffect(() => {
+    listTemplates()
+      .then((d) => setTemplates(Array.isArray(d) ? d : []))
+      .catch(() => setTemplates([]));
+  }, []);
+
+  // Default new profiles to "Classic" when templates load.
+  useEffect(() => {
+    if (editing !== 'new') return;
+    if (form.templateId) return;
+    const classic = (templates || []).find((t) => String(t?.name || '').toLowerCase() === 'classic');
+    if (classic?._id) setForm((f) => ({ ...f, templateId: String(classic._id) }));
+  }, [templates, editing, form.templateId]);
+  useEffect(() => {
+    listCVs().then((d) => setCvs(Array.isArray(d) ? d : [])).catch(() => setCvs([]));
+  }, []);
+
+  function mostRecentCvIdForProfile(profileId) {
+    const pid = String(profileId || '');
+    let best = null;
+    for (const cv of cvs) {
+      if (profileRefToIdString(cv?.profileId) !== pid) continue;
+      const t = new Date(cv.updatedAt || cv.createdAt || 0).getTime();
+      if (!best || t > best.t) best = { id: String(cv._id), t };
+    }
+    return best?.id || '';
+  }
+
+  async function previewSelectedTemplate() {
+    const templateId = String(form.templateId || '');
+    if (!templateId) {
+      setError('Select a PDF template first.');
+      return;
+    }
+    if (!editing || editing === 'new') {
+      setError('Save the profile first to preview a template.');
+      return;
+    }
+    const cvId = mostRecentCvIdForProfile(editing);
+    if (!cvId) {
+      setError('Create at least one CV with this profile first, then preview the template.');
+      return;
+    }
+    setPreviewing(true);
+    setError('');
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get(`/api/template/${encodeURIComponent(templateId)}/preview`, {
+        params: { cvId },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        responseType: 'text',
+      });
+      const html = String(res.data || '');
+      const w = window.open('', '_blank', 'noopener,noreferrer');
+      if (!w) throw new Error('Popup blocked. Allow popups to preview templates.');
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+    } catch (err) {
+      setError(err.response?.data?.error || err.response?.data || err.message || 'Template preview failed');
+    } finally {
+      setPreviewing(false);
+    }
+  }
 
   async function fetchProfiles() {
     setLoading(true);
@@ -166,6 +238,8 @@ export default function ProfilePage() {
       workExperiences: profile.workExperiences?.length ? profile.workExperiences : [],
       education: profile.education?.length ? profile.education : [],
       certifications: profile.certifications?.length ? profile.certifications : [],
+      cvFormat: profile.cvFormat || 'classic',
+      templateId: profile.templateId?._id ? String(profile.templateId._id) : (profile.templateId ? String(profile.templateId) : ''),
       cvGeneration: {
         ...baseGen,
         ...cg,
@@ -174,6 +248,17 @@ export default function ProfilePage() {
     });
     setEditing(profile._id);
     setError('');
+  }
+
+  function toggleExpanded(profileId) {
+    const id = String(profileId || '');
+    if (!id) return;
+    setExpandedProfileIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   function cancelEdit() { setEditing(null); setForm(emptyFormState()); setError(''); }
@@ -366,11 +451,24 @@ export default function ProfilePage() {
                   )}
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleExpanded(p._id)}
+                    className="rounded-lg border border-gray-200 px-3 py-1 text-xs text-gray-600 transition hover:bg-gray-50"
+                    aria-expanded={expandedProfileIds.has(String(p._id))}
+                    aria-controls={`profile-details-${p._id}`}
+                  >
+                    {expandedProfileIds.has(String(p._id)) ? 'Hide details' : 'Details'}
+                  </button>
                   <button type="button" onClick={() => startEdit(p)} className="rounded-lg border border-accent px-3 py-1 text-xs text-accent transition hover:bg-blue-50">Edit</button>
                   <button type="button" onClick={() => handleDelete(p._id)} className="rounded-lg border border-red-200 px-3 py-1 text-xs text-red-400 transition hover:bg-red-50">Delete</button>
                 </div>
               </div>
-              <ProfileCareerAndEducation profile={p} />
+              {expandedProfileIds.has(String(p._id)) && (
+                <div id={`profile-details-${p._id}`}>
+                  <ProfileCareerAndEducation profile={p} />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -497,6 +595,24 @@ export default function ProfilePage() {
                 <p className="text-xs text-gray-500 mt-1">
                   Controls the OpenAI <strong>system</strong> message for <strong className="text-gray-700">Create CV</strong> and workspace bulk generate. The candidate profile (without these settings) is still sent in the user message.
                 </p>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 bg-white/80 p-3">
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Resume template</label>
+                <p className="text-[11px] text-gray-500 mb-2">
+                  Select one format for downloads (PDF/DOCX).
+                </p>
+                <select
+                  value={form.templateId || ''}
+                  onChange={(e) => setForm((f) => ({ ...f, templateId: e.target.value }))}
+                  className={INPUT_CLS}
+                >
+                  {templates.map((t) => (
+                    <option key={t._id} value={String(t._id)}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="rounded-lg border border-gray-200 bg-white/90 p-3 space-y-2">

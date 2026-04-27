@@ -19,6 +19,74 @@ function normalizeUrl(raw) {
   }
 }
 
+// POST /api/workspace-links/check-url  { url }
+exports.checkUrl = async (req, res) => {
+  try {
+    const { url } = req.body || {};
+    const raw = String(url || '').trim();
+    if (!raw) return res.status(400).json({ error: 'url is required' });
+    const normalizedUrl = normalizeUrl(raw);
+    if (!normalizedUrl) return res.status(400).json({ error: 'Invalid url' });
+
+    const link = await UploadedLink.findOne({
+      userId: req.user._id,
+      normalizedUrl: normalizedUrl.slice(0, 2048),
+    })
+      .populate('jobDescriptionId', 'text')
+      .lean();
+
+    if (!link) return res.json({ exists: false });
+
+    // Repair old data: link marked created but missing cvId.
+    // This can happen if CVs were created outside the workspace-link flow or from older versions.
+    // Best-effort: attach the newest CV that shares the same JobDescription (if present).
+    let repairedCvId = link.cvId;
+    let repairedProfileId = link.profileId;
+    if (String(link.cvStatus || '') === 'created' && repairedCvId == null && link.jobDescriptionId?._id) {
+      const newest = await CV.findOne({
+        userId: req.user._id,
+        jobDescriptionId: link.jobDescriptionId._id,
+      })
+        .sort({ createdAt: -1 })
+        .select('_id profileId')
+        .lean();
+
+      if (newest?._id) {
+        repairedCvId = newest._id;
+        repairedProfileId = repairedProfileId || newest.profileId || null;
+        await UploadedLink.updateOne(
+          { _id: link._id, userId: req.user._id },
+          { $set: { cvId: repairedCvId, profileId: repairedProfileId } },
+          { timestamps: false }
+        );
+      }
+    }
+
+    const hasJd = Boolean(link?.jobDescriptionId?.text && String(link.jobDescriptionId.text).trim().length > 0);
+    const hasProfile = repairedProfileId != null && String(repairedProfileId) !== '';
+    const cvReady = repairedCvId != null;
+
+    res.json({
+      exists: true,
+      link: {
+        _id: link._id,
+        url: link.url,
+        sourceFileName: link.sourceFileName,
+        profileId: repairedProfileId || null,
+        cvStatus: link.cvStatus || 'not_started',
+        cvId: repairedCvId || null,
+        hasJd,
+        hasProfile,
+        updatedAt: link.updatedAt,
+        createdAt: link.createdAt,
+      },
+      cvReady,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 // GET /api/workspace-links?profileId=
 exports.list = async (req, res) => {
   try {

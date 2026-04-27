@@ -14,14 +14,12 @@ const CVSchema = new mongoose.Schema(
     salary_range: { type: String, default: '' },
     summary: { type: String, required: true },
     skills: { type: Map, of: [String], required: true },
-    experiences: {
-      role1: String,
-      experience1: [String],
-      role2: String,
-      experience2: [String],
-      role3: String,
-      experience3: [String],
-    },
+    /**
+     * Dynamic experience payload.
+     * - When profile has workExperiences: keys are experience1..experienceN (arrays of strings).
+     * - When profile has no workExperiences: may include role1/company1/date1 + experience1, etc (up to syntheticRoleCount).
+     */
+    experiences: { type: mongoose.Schema.Types.Mixed, default: {} },
     job_link: { type: String, default: '' },
     job_description: { type: String },
     jobDescriptionId: { type: 'ObjectId', ref: 'JobDescription', default: null },

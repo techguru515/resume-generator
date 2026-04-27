@@ -26,12 +26,20 @@ export const updateCVStatus = (id, status) =>
 export const downloadDocxUrl = (id) => `/api/cv/${id}/download/docx`;
 export const downloadPdfUrl = (id) => `/api/cv/${id}/download/pdf`;
 
+// AI assistant
+export const cvChat = ({ cvId, message, history }) =>
+  api.post('/ai/cv-chat', { cvId, message, history }).then((r) => r.data);
+
 // Profile
 export const listProfiles = () => api.get('/profile').then((r) => r.data);
 export const getProfileById = (id) => api.get(`/profile/${id}`).then((r) => r.data);
 export const createProfile = (data) => api.post('/profile', data).then((r) => r.data);
 export const updateProfile = (id, data) => api.put(`/profile/${id}`, data).then((r) => r.data);
 export const deleteProfile = (id) => api.delete(`/profile/${id}`).then((r) => r.data);
+
+// Templates
+export const listTemplates = () => api.get('/template').then((r) => r.data);
+export const getTemplate = (id) => api.get(`/template/${id}`).then((r) => r.data);
 
 // Workspace (saved hyperlinks from uploads)
 export const listWorkspaceLinks = (params) =>
