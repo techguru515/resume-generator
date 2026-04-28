@@ -53,6 +53,19 @@ function openCvInNewWindow(cvId) {
   window.open(`/cv/${cvId}`, '_blank', 'noopener,noreferrer');
 }
 
+function isLinkedInUrl(rawUrl) {
+  const s = String(rawUrl || '').trim();
+  if (!s) return false;
+  try {
+    const u = new URL(s);
+    const host = (u.hostname || '').toLowerCase();
+    return host === 'linkedin.com' || host.endsWith('.linkedin.com') || host === 'lnkd.in';
+  } catch {
+    const low = s.toLowerCase();
+    return low.includes('linkedin.com') || low.includes('lnkd.in');
+  }
+}
+
 function escapeHtmlAttr(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -258,6 +271,8 @@ export default function Workspace() {
   /** Saved links table: filter by CV status */
   const [cvSortField, setCvSortField] = useState('updated');
   const [cvSortOrder, setCvSortOrder] = useState('desc');
+
+  const [workspaceTableTab, setWorkspaceTableTab] = useState('links'); // 'links' | 'cvs'
 
   const [selectedLinkIds, setSelectedLinkIds] = useState([]);
   const [deletingLinks, setDeletingLinks] = useState(false);
@@ -499,6 +514,7 @@ export default function Workspace() {
         cvError: String(row.cvError || '').trim(),
         cvErrorHistory: Array.isArray(row.cvErrorHistory) ? row.cvErrorHistory : [],
         cvId: row.cvId || null,
+        linkType: isLinkedInUrl(row.url) ? 'linkedin' : 'other',
       }));
 
     /** Newest created first; ties break by newest updated */
@@ -892,9 +908,41 @@ ${items}
       </div>
 
       {/* Tables: extracted links + CVs */}
-      <div className="bg-white rounded-2xl shadow p-5 space-y-8">
+      <div className="bg-white rounded-2xl shadow p-5 space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2" role="tablist" aria-label="Workspace tables">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={workspaceTableTab === 'links'}
+              onClick={() => setWorkspaceTableTab('links')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                workspaceTableTab === 'links'
+                  ? 'bg-primary text-white border-primary'
+                  : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              Links
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={workspaceTableTab === 'cvs'}
+              onClick={() => setWorkspaceTableTab('cvs')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                workspaceTableTab === 'cvs'
+                  ? 'bg-primary text-white border-primary'
+                  : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              Saved CVs
+            </button>
+          </div>
+        </div>
+
         {/* Hyperlinks from uploads */}
-        <div className="space-y-4">
+        {workspaceTableTab === 'links' && (
+        <div className="space-y-4" role="tabpanel">
           <div className="space-y-3">
             <div className="min-w-0">
               <h3 className="text-sm font-bold text-primary">Saved hyperlinks</h3>
@@ -1082,6 +1130,7 @@ ${items}
                           <th scope="col" className="px-4 py-3 w-[22%]">Source file</th>
                           <th scope="col" className="px-4 py-3 w-[12%]">Profile</th>
                           <th scope="col" className="px-4 py-3 w-[40%]">URL</th>
+                          <th scope="col" className="px-4 py-3 w-[10%]">Type</th>
                           <th scope="col" className="px-4 py-3 w-[11%] whitespace-nowrap">Created</th>
                           <th scope="col" className="px-4 py-3 w-[11%] whitespace-nowrap">Updated</th>
                           <th scope="col" className="px-4 py-3 w-[13%]">CV status</th>
@@ -1149,6 +1198,18 @@ ${items}
                                   >
                                     {row.url}
                                   </a>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span
+                                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
+                                      row.linkType === 'linkedin'
+                                        ? 'bg-sky-50 text-sky-800 border-sky-200'
+                                        : 'bg-gray-50 text-gray-700 border-gray-200'
+                                    }`}
+                                    title={row.linkType === 'linkedin' ? 'LinkedIn URL' : 'Non-LinkedIn URL'}
+                                  >
+                                    {row.linkType === 'linkedin' ? 'LinkedIn' : 'Other'}
+                                  </span>
                                 </td>
                                 <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
                                   {formatLinkDate(row.createdAt)}
@@ -1281,8 +1342,10 @@ ${items}
             </>
           )}
         </div>
+        )}
 
-        <div className="border-t border-gray-100 pt-8 space-y-4">
+        {workspaceTableTab === 'cvs' && (
+        <div className="space-y-4" role="tabpanel">
           <div className="space-y-3">
             <div className="min-w-0">
               <h3 className="text-sm font-bold text-primary">Saved CVs</h3>
@@ -1474,6 +1537,7 @@ ${items}
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );
