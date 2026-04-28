@@ -49,6 +49,14 @@ function LinkSelectIcon({ checked, indeterminate = false }) {
   );
 }
 
+function FunnelIcon({ className = 'w-3.5 h-3.5' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 5h18l-7 8v5l-4 2v-7L3 5z" />
+    </svg>
+  );
+}
+
 function openCvInNewWindow(cvId) {
   window.open(`/cv/${cvId}`, '_blank', 'noopener,noreferrer');
 }
@@ -260,17 +268,21 @@ export default function Workspace() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [tableProfileFilter, setTableProfileFilter] = useState('all');
+  const [cvDateFrom, setCvDateFrom] = useState(''); // yyyy-mm-dd
+  const [cvDateTo, setCvDateTo] = useState(''); // yyyy-mm-dd
   const [linkSearch, setLinkSearch] = useState('');
-  const [linkDateFilter, setLinkDateFilter] = useState('all');
+  const [linkDateFrom, setLinkDateFrom] = useState(''); // yyyy-mm-dd
+  const [linkDateTo, setLinkDateTo] = useState(''); // yyyy-mm-dd
   const [linkCvStatusFilter, setLinkCvStatusFilter] = useState('all');
+  const [linkProfileFilter, setLinkProfileFilter] = useState('all'); // 'all' | 'none' | profileId
+  const [linkTypeFilter, setLinkTypeFilter] = useState('all'); // 'all' | 'linkedin' | 'other'
+  const [linkJdFilter, setLinkJdFilter] = useState('all'); // 'all' | 'has' | 'missing'
+  const [linkSourceFileFilter, setLinkSourceFileFilter] = useState('all'); // 'all' | sourceFileName
+  const [openLinkHeaderFilter, setOpenLinkHeaderFilter] = useState(''); // '' | 'profile' | 'type' | 'cvStatus' | 'jd'
   const [linkPage, setLinkPage] = useState(1);
   const [cvPage, setCvPage] = useState(1);
   const [linkPageSize, setLinkPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [cvPageSize, setCvPageSize] = useState(DEFAULT_PAGE_SIZE);
-
-  /** Saved links table: filter by CV status */
-  const [cvSortField, setCvSortField] = useState('updated');
-  const [cvSortOrder, setCvSortOrder] = useState('desc');
 
   const [workspaceTableTab, setWorkspaceTableTab] = useState('links'); // 'links' | 'cvs'
 
@@ -446,6 +458,14 @@ export default function Workspace() {
   const filteredCvs = useMemo(() => {
     const q = search.trim().toLowerCase();
     return cvList.filter((cv) => {
+      const createdMs = new Date(cv.createdAt || 0).getTime();
+      if (!Number.isFinite(createdMs) || createdMs <= 0) return false;
+
+      const fromMs = cvDateFrom ? new Date(`${cvDateFrom}T00:00:00`).getTime() : null;
+      const toMs = cvDateTo ? new Date(`${cvDateTo}T23:59:59.999`).getTime() : null;
+      if (fromMs != null && Number.isFinite(fromMs) && createdMs < fromMs) return false;
+      if (toMs != null && Number.isFinite(toMs) && createdMs > toMs) return false;
+
       const pid = profileRefToIdString(cv.profileId);
       if (tableProfileFilter !== 'all' && pid !== tableProfileFilter) return false;
       const st = cv.application_status || 'saved';
@@ -460,40 +480,56 @@ export default function Workspace() {
       }
       return true;
     });
-  }, [cvList, search, statusFilter, tableProfileFilter, profileLabelById]);
+  }, [cvList, search, statusFilter, tableProfileFilter, cvDateFrom, cvDateTo, profileLabelById]);
 
   const linkTableRows = useMemo(() => {
     const list = Array.isArray(savedLinks) ? savedLinks : [];
     const q = linkSearch.trim().toLowerCase();
 
-    function startOfDay(d) {
-      const x = new Date(d);
-      x.setHours(0, 0, 0, 0);
-      return x;
-    }
-
-    function isWithinSelectedPeriod(rowCreatedAt) {
-      if (linkDateFilter === 'all') return true;
+    function dateRangeOk(rowCreatedAt) {
       const t = new Date(rowCreatedAt || 0).getTime();
       if (!Number.isFinite(t) || t <= 0) return false;
 
-      const now = new Date();
-      const today0 = startOfDay(now).getTime();
+      // Parse yyyy-mm-dd in local time.
+      const fromMs = linkDateFrom ? new Date(`${linkDateFrom}T00:00:00`).getTime() : null;
+      const toMs = linkDateTo ? new Date(`${linkDateTo}T23:59:59.999`).getTime() : null;
 
-      if (linkDateFilter === 'today') return t >= today0;
-      if (linkDateFilter === 'last2') return t >= today0 - 2 * 24 * 60 * 60 * 1000;
-      if (linkDateFilter === 'last3') return t >= today0 - 3 * 24 * 60 * 60 * 1000;
-      if (linkDateFilter === 'last7') return t >= today0 - 7 * 24 * 60 * 60 * 1000;
-      if (linkDateFilter === 'last15') return t >= today0 - 15 * 24 * 60 * 60 * 1000;
+      if (fromMs != null && Number.isFinite(fromMs) && t < fromMs) return false;
+      if (toMs != null && Number.isFinite(toMs) && t > toMs) return false;
       return true;
     }
 
     const rows = list
       .filter((row) => {
-        if (!isWithinSelectedPeriod(row.createdAt)) return false;
+        if (!dateRangeOk(row.createdAt)) return false;
+
+        if (linkSourceFileFilter !== 'all') {
+          const sf = String(row.sourceFileName || '');
+          if (sf !== linkSourceFileFilter) return false;
+        }
 
         const st = String(row.cvStatus || 'not_started');
         if (linkCvStatusFilter !== 'all' && st !== linkCvStatusFilter) return false;
+
+        if (linkJdFilter !== 'all') {
+          const sid = String(row?._id || '');
+          const jdText = jdByLinkId?.[sid] != null ? jdByLinkId[sid] : row?.jobDescriptionId?.text;
+          const hasJd = Boolean(String(jdText || '').trim());
+          if (linkJdFilter === 'has' && !hasJd) return false;
+          if (linkJdFilter === 'missing' && hasJd) return false;
+        }
+
+        const pid = profileRefToIdString(row.profileId);
+        if (linkProfileFilter !== 'all') {
+          if (linkProfileFilter === 'none') {
+            if (pid) return false;
+          } else if (pid !== linkProfileFilter) {
+            return false;
+          }
+        }
+
+        const t = isLinkedInUrl(row.url) ? 'linkedin' : 'other';
+        if (linkTypeFilter !== 'all' && t !== linkTypeFilter) return false;
 
         if (!q) return true;
         const url = (row.url || '').toLowerCase();
@@ -530,30 +566,19 @@ export default function Workspace() {
 
     rows.sort(defaultLinkOrder);
     return rows;
-  }, [savedLinks, linkSearch, linkDateFilter, linkCvStatusFilter, profileLabelById]);
+  }, [savedLinks, linkSearch, linkDateFrom, linkDateTo, linkCvStatusFilter, linkProfileFilter, linkTypeFilter, linkJdFilter, linkSourceFileFilter, jdByLinkId, profileLabelById]);
 
   const sortedFilteredCvs = useMemo(() => {
     const rows = [...filteredCvs];
-    const mul = cvSortOrder === 'desc' ? -1 : 1;
     rows.sort((a, b) => {
-      let cmp = 0;
-      if (cvSortField === 'profile') {
-        const la = String(profileRefToLabel(a.profileId, profileLabelById) || '').toLowerCase();
-        const lb = String(profileRefToLabel(b.profileId, profileLabelById) || '').toLowerCase();
-        cmp = la.localeCompare(lb, undefined, { sensitivity: 'base' });
-      } else if (cvSortField === 'jobType') {
-        const la = String(a.job_type || '').toLowerCase();
-        const lb = String(b.job_type || '').toLowerCase();
-        cmp = la.localeCompare(lb, undefined, { sensitivity: 'base' });
-      } else if (cvSortField === 'created') {
-        cmp = new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
-      } else {
-        cmp = new Date(a.updatedAt || a.createdAt || 0).getTime() - new Date(b.updatedAt || b.createdAt || 0).getTime();
-      }
-      return cmp * mul;
+      // Fixed ordering: newest updated first (ties: newest created).
+      const ua = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const ub = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      if (ub !== ua) return ub - ua;
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
     });
     return rows;
-  }, [filteredCvs, profileLabelById, cvSortField, cvSortOrder]);
+  }, [filteredCvs]);
 
   const anyLinkExtracting = uploadedFiles.some((f) => f.extracting);
 
@@ -564,7 +589,7 @@ export default function Workspace() {
 
   useEffect(() => {
     setLinkPage(1);
-  }, [linkSearch, linkDateFilter, linkCvStatusFilter, linkPageSize]);
+  }, [linkSearch, linkDateFrom, linkDateTo, linkCvStatusFilter, linkProfileFilter, linkTypeFilter, linkJdFilter, linkSourceFileFilter, linkPageSize]);
 
   useEffect(() => {
     const tp = Math.ceil(linkTableRows.length / linkPageSize) || 1;
@@ -573,7 +598,7 @@ export default function Workspace() {
 
   useEffect(() => {
     setCvPage(1);
-  }, [search, statusFilter, tableProfileFilter, cvPageSize, cvSortField, cvSortOrder]);
+  }, [search, statusFilter, tableProfileFilter, cvDateFrom, cvDateTo, cvPageSize]);
 
   useEffect(() => {
     const tp = Math.ceil(sortedFilteredCvs.length / cvPageSize) || 1;
@@ -648,6 +673,20 @@ ${items}
     const el = linkSelectAllRef.current;
     if (el) el.indeterminate = somePageLinksSelected;
   }, [somePageLinksSelected]);
+
+  useEffect(() => {
+    function onDocPointerDown(e) {
+      // Close header filter popovers when clicking anywhere outside the filter button/popup itself.
+      // (Clicking other header cells should close it too.)
+      const inside = e?.target && typeof e.target.closest === 'function'
+        ? e.target.closest('[data-link-header-filter-root="true"]')
+        : null;
+      if (inside) return;
+      setOpenLinkHeaderFilter('');
+    }
+    document.addEventListener('pointerdown', onDocPointerDown);
+    return () => document.removeEventListener('pointerdown', onDocPointerDown);
+  }, []);
 
   const toggleLinkSelected = useCallback((id) => {
     const sid = String(id);
@@ -922,7 +961,7 @@ ${items}
                   : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
               }`}
             >
-              Links
+              Jobs
             </button>
             <button
               type="button"
@@ -935,7 +974,7 @@ ${items}
                   : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
               }`}
             >
-              Saved CVs
+              Resumes
             </button>
           </div>
         </div>
@@ -945,7 +984,7 @@ ${items}
         <div className="space-y-4" role="tabpanel">
           <div className="space-y-3">
             <div className="min-w-0">
-              <h3 className="text-sm font-bold text-primary">Saved hyperlinks</h3>
+              <h3 className="text-sm font-bold text-primary">Jobs</h3>
               <p className="text-xs text-gray-400 mt-0.5">
                 New URLs are saved once per account (normalized). If the same URL is uploaded again, that row is marked <strong className="text-gray-600">Duplicate</strong>, <strong className="text-gray-600">Updated</strong> shows the last re-upload time, and <strong className="text-gray-600">Created</strong> stays the first time you saved it. Changing profile, JD, or CV status does not change duplicate status or these times.
               </p>
@@ -962,33 +1001,22 @@ ${items}
                 />
               </div>
               <div className="min-w-0">
-                <label className="block text-xs font-semibold text-gray-500 mb-0.5">Period</label>
-                <select
-                  value={linkDateFilter}
-                  onChange={(e) => setLinkDateFilter(e.target.value)}
+                <label className="block text-xs font-semibold text-gray-500 mb-0.5">From</label>
+                <input
+                  type="date"
+                  value={linkDateFrom}
+                  onChange={(e) => setLinkDateFrom(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
-                >
-                  <option value="all">All time</option>
-                  <option value="today">Today</option>
-                  <option value="last2">Last 2 days</option>
-                  <option value="last3">Last 3 days</option>
-                  <option value="last7">Last 7 days</option>
-                  <option value="last15">Last 15 days</option>
-                </select>
+                />
               </div>
               <div className="min-w-0">
-                <label className="block text-xs font-semibold text-gray-500 mb-0.5">Filter by CV status</label>
-                <select
-                  value={linkCvStatusFilter}
-                  onChange={(e) => setLinkCvStatusFilter(e.target.value)}
+                <label className="block text-xs font-semibold text-gray-500 mb-0.5">To</label>
+                <input
+                  type="date"
+                  value={linkDateTo}
+                  onChange={(e) => setLinkDateTo(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
-                >
-                  <option value="all">All</option>
-                  <option value="not_started">Empty</option>
-                  <option value="pending">Creating…</option>
-                  <option value="created">Created</option>
-                  <option value="failed">Failed</option>
-                </select>
+                />
               </div>
               <div className="min-w-0">
                 <label className="block text-xs font-semibold text-gray-500 mb-0.5">Rows per page</label>
@@ -1056,7 +1084,7 @@ ${items}
             <p className="text-sm text-gray-400 text-center py-8 border border-dashed border-gray-200 rounded-xl bg-gray-50/50">
               Upload a file above to extract <code className="text-xs bg-gray-100 px-1 rounded">http(s)://</code> links; they will be stored in the database and appear here.
             </p>
-          ) : linkTableRows.length === 0 && !anyLinkExtracting ? (
+          ) : savedLinks.length === 0 && linkTableRows.length === 0 && !anyLinkExtracting ? (
             <p className="text-sm text-gray-400 text-center py-8 border border-dashed border-gray-200 rounded-xl bg-gray-50/50">
               {savedLinks.length > 0
                 ? 'No links match your filter.'
@@ -1107,11 +1135,10 @@ ${items}
                   </div>
                 )}
               </div>
-              {linkTableRows.length > 0 && (
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="max-h-[520px] overflow-y-auto overflow-x-hidden">
-                    <table className="w-full text-sm table-fixed min-w-0">
-                      <thead>
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <div className="max-h-[520px] overflow-y-auto overflow-x-hidden">
+                  <table className="w-full text-sm table-fixed min-w-0">
+                    <thead>
                         <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide sticky top-0 z-10">
                           <th className="px-1.5 py-3 w-11 text-center">
                             <label className="inline-flex cursor-pointer items-center justify-center rounded-md focus-within:outline-none focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-1">
@@ -1127,19 +1154,185 @@ ${items}
                               <LinkSelectIcon checked={allPageLinksSelected} indeterminate={somePageLinksSelected} />
                             </label>
                           </th>
-                          <th scope="col" className="px-4 py-3 w-[22%]">Source file</th>
-                          <th scope="col" className="px-4 py-3 w-[12%]">Profile</th>
+                          <th scope="col" className="px-4 py-3 w-[22%]">
+                            <div className="flex items-center gap-2">
+                              <span>Source file</span>
+                              <div className="relative" data-link-header-filter-root="true">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setOpenLinkHeaderFilter((cur) => (cur === 'source' ? '' : 'source')); }}
+                                  className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                                  aria-label="Filter by source file"
+                                >
+                                  <FunnelIcon />
+                                </button>
+                                {openLinkHeaderFilter === 'source' && (
+                                  <div
+                                    className="absolute left-0 mt-2 w-56 rounded-lg border border-gray-200 bg-white shadow-lg p-2 z-20"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                  >
+                                    <select
+                                      value={linkSourceFileFilter}
+                                      onChange={(e) => setLinkSourceFileFilter(e.target.value)}
+                                      className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-accent"
+                                    >
+                                      <option value="all">All</option>
+                                      {Array.from(
+                                        new Set((Array.isArray(savedLinks) ? savedLinks : []).map((l) => String(l?.sourceFileName || '')).filter(Boolean))
+                                      )
+                                        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+                                        .map((name) => (
+                                          <option key={name} value={name}>{name}</option>
+                                        ))}
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </th>
+                          <th scope="col" className="px-4 py-3 w-[12%]">
+                            <div className="flex items-center gap-2">
+                              <span>Profile</span>
+                              <div className="relative" data-link-header-filter-root="true">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setOpenLinkHeaderFilter((cur) => (cur === 'profile' ? '' : 'profile')); }}
+                                  className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                                  aria-label="Filter by profile"
+                                >
+                                  <FunnelIcon />
+                                </button>
+                                {openLinkHeaderFilter === 'profile' && (
+                                  <div
+                                    className="absolute right-0 mt-2 w-44 rounded-lg border border-gray-200 bg-white shadow-lg p-2 z-20"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                  >
+                                    <select
+                                      value={linkProfileFilter}
+                                      onChange={(e) => setLinkProfileFilter(e.target.value)}
+                                      className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-accent"
+                                    >
+                                      <option value="all">All profiles</option>
+                                      <option value="none">No profile</option>
+                                      {profiles.map((p) => (
+                                        <option key={p._id} value={String(p._id)}>{p.label}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </th>
                           <th scope="col" className="px-4 py-3 w-[40%]">URL</th>
-                          <th scope="col" className="px-4 py-3 w-[10%]">Type</th>
+                          <th scope="col" className="px-4 py-3 w-[10%]">
+                            <div className="flex items-center gap-2">
+                              <span>Type</span>
+                              <div className="relative" data-link-header-filter-root="true">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setOpenLinkHeaderFilter((cur) => (cur === 'type' ? '' : 'type')); }}
+                                  className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                                  aria-label="Filter by type"
+                                >
+                                  <FunnelIcon />
+                                </button>
+                                {openLinkHeaderFilter === 'type' && (
+                                  <div
+                                    className="absolute right-0 mt-2 w-44 rounded-lg border border-gray-200 bg-white shadow-lg p-2 z-20"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                  >
+                                    <select
+                                      value={linkTypeFilter}
+                                      onChange={(e) => setLinkTypeFilter(e.target.value)}
+                                      className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-accent"
+                                    >
+                                      <option value="all">All types</option>
+                                      <option value="linkedin">LinkedIn</option>
+                                      <option value="other">Other</option>
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </th>
                           <th scope="col" className="px-4 py-3 w-[11%] whitespace-nowrap">Created</th>
                           <th scope="col" className="px-4 py-3 w-[11%] whitespace-nowrap">Updated</th>
-                          <th scope="col" className="px-4 py-3 w-[13%]">CV status</th>
-                          <th className="px-4 py-3 pl-4 pr-1 w-[9%]">JD</th>
+                          <th scope="col" className="px-4 py-3 w-[13%]">
+                            <div className="flex items-center gap-2">
+                              <span>CV status</span>
+                              <div className="relative" data-link-header-filter-root="true">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setOpenLinkHeaderFilter((cur) => (cur === 'cvStatus' ? '' : 'cvStatus')); }}
+                                  className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                                  aria-label="Filter by CV status"
+                                >
+                                  <FunnelIcon />
+                                </button>
+                                {openLinkHeaderFilter === 'cvStatus' && (
+                                  <div
+                                    className="absolute right-0 mt-2 w-44 rounded-lg border border-gray-200 bg-white shadow-lg p-2 z-20"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                  >
+                                    <select
+                                      value={linkCvStatusFilter}
+                                      onChange={(e) => setLinkCvStatusFilter(e.target.value)}
+                                      className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-accent"
+                                    >
+                                      <option value="all">All</option>
+                                      <option value="not_started">Empty</option>
+                                      <option value="pending">Creating…</option>
+                                      <option value="created">Created</option>
+                                      <option value="failed">Failed</option>
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </th>
+                          <th className="px-4 py-3 pl-4 pr-1 w-[9%]">
+                            <div className="flex items-center gap-2">
+                              <span>JD</span>
+                              <div className="relative" data-link-header-filter-root="true">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setOpenLinkHeaderFilter((cur) => (cur === 'jd' ? '' : 'jd')); }}
+                                  className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                                  aria-label="Filter by job description"
+                                >
+                                  <FunnelIcon />
+                                </button>
+                                {openLinkHeaderFilter === 'jd' && (
+                                  <div
+                                    className="absolute right-0 mt-2 w-36 rounded-lg border border-gray-200 bg-white shadow-lg p-2 z-20"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                  >
+                                    <select
+                                      value={linkJdFilter}
+                                      onChange={(e) => setLinkJdFilter(e.target.value)}
+                                      className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-accent"
+                                    >
+                                      <option value="all">All</option>
+                                      <option value="has">Has JD</option>
+                                      <option value="missing">Missing JD</option>
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </th>
                           <th className="pl-0 pr-2 py-3 w-10" aria-label="Delete link" />
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {paginatedLinkRows.flatMap((row) => {
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {paginatedLinkRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={10} className="px-6 py-10 text-center text-sm text-gray-400">
+                            {savedLinks.length > 0 ? 'No jobs match your current filters.' : 'No jobs yet.'}
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedLinkRows.flatMap((row) => {
                           const id = String(row.key);
                           const isOpen = jdOpenLinkId === id;
                           const jd = jdByLinkId[id] || '';
@@ -1265,7 +1458,7 @@ ${items}
                             ),
                             isOpen ? (
                               <tr key={`${row.key}-preview`} className="bg-white">
-                                <td className="px-4 py-3" colSpan={9}>
+                                <td className="px-4 py-3" colSpan={10}>
                                   <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3">
                                     <div className="space-y-2">
                                       <div className="flex items-start justify-between gap-3">
@@ -1310,35 +1503,35 @@ ${items}
                               </tr>
                             ) : null,
                           ].filter(Boolean);
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="px-3 pb-3 bg-gray-50/80 border-t border-gray-100 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-xs text-gray-500">
-                      {linkTableRows.length > 0 ? (
-                        <>
-                          Showing{' '}
-                          <strong className="text-primary">
-                            {(linkPage - 1) * linkPageSize + 1}
-                            –
-                            {Math.min(linkPage * linkPageSize, linkTableRows.length)}
-                          </strong>
-                          {' '}of <strong className="text-primary">{linkTableRows.length}</strong> link{linkTableRows.length !== 1 ? 's' : ''}
-                          {(linkSearch.trim() || linkDateFilter !== 'all' || linkCvStatusFilter !== 'all') ? ' (filtered)' : ''}
-                          {' '}· {linkPageSize} / page
-                        </>
-                      ) : null}
-                    </p>
-                    <Pagination
-                      page={linkPage}
-                      total={linkTableRows.length}
-                      pageSize={linkPageSize}
-                      onChange={setLinkPage}
-                    />
-                  </div>
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              )}
+                <div className="px-3 pb-3 bg-gray-50/80 border-t border-gray-100 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-gray-500">
+                    {linkTableRows.length > 0 ? (
+                      <>
+                        Showing{' '}
+                        <strong className="text-primary">
+                          {(linkPage - 1) * linkPageSize + 1}
+                          –
+                          {Math.min(linkPage * linkPageSize, linkTableRows.length)}
+                        </strong>
+                        {' '}of <strong className="text-primary">{linkTableRows.length}</strong> link{linkTableRows.length !== 1 ? 's' : ''}
+                        {(linkSearch.trim() || linkDateFrom || linkDateTo || linkCvStatusFilter !== 'all' || linkProfileFilter !== 'all' || linkTypeFilter !== 'all' || linkJdFilter !== 'all' || linkSourceFileFilter !== 'all') ? ' (filtered)' : ''}
+                        {' '}· {linkPageSize} / page
+                      </>
+                    ) : null}
+                  </p>
+                  <Pagination
+                    page={linkPage}
+                    total={linkTableRows.length}
+                    pageSize={linkPageSize}
+                    onChange={setLinkPage}
+                  />
+                </div>
+              </div>
             </>
           )}
         </div>
@@ -1348,9 +1541,9 @@ ${items}
         <div className="space-y-4" role="tabpanel">
           <div className="space-y-3">
             <div className="min-w-0">
-              <h3 className="text-sm font-bold text-primary">Saved CVs</h3>
+              <h3 className="text-sm font-bold text-primary">Resumes</h3>
               <p className="text-xs text-gray-400 mt-0.5">
-                Search, filter, and sort. Click a row or Open to view the CV in a new tab.
+                Search and filter. Click a row or Open to view the CV in a new tab.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full">
@@ -1390,6 +1583,24 @@ ${items}
                   ))}
                 </select>
               </div>
+              <div className="w-full sm:w-40">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">From</label>
+                <input
+                  type="date"
+                  value={cvDateFrom}
+                  onChange={(e) => setCvDateFrom(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
+                />
+              </div>
+              <div className="w-full sm:w-40">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">To</label>
+                <input
+                  type="date"
+                  value={cvDateTo}
+                  onChange={(e) => setCvDateTo(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
+                />
+              </div>
               <div className="w-full sm:w-36">
                 <label className="block text-xs font-semibold text-gray-500 mb-1">Rows per page</label>
                 <select
@@ -1400,30 +1611,6 @@ ${items}
                   {PAGE_SIZE_OPTIONS.map((n) => (
                     <option key={n} value={n}>{n} / page</option>
                   ))}
-                </select>
-              </div>
-              <div className="w-full sm:w-36">
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Sort by</label>
-                <select
-                  value={cvSortField}
-                  onChange={(e) => setCvSortField(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
-                >
-                  <option value="profile">Profile</option>
-                  <option value="jobType">Job type</option>
-                  <option value="created">Created</option>
-                  <option value="updated">Updated</option>
-                </select>
-              </div>
-              <div className="w-full sm:w-32">
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Order</label>
-                <select
-                  value={cvSortOrder}
-                  onChange={(e) => setCvSortOrder(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent bg-white"
-                >
-                  <option value="asc">Ascending</option>
-                  <option value="desc">Descending</option>
                 </select>
               </div>
             </div>
@@ -1440,7 +1627,7 @@ ${items}
             <div className="space-y-2">
               <p className="text-xs text-gray-500">
                 <strong className="text-primary">0</strong> of {cvList.length} CV{cvList.length !== 1 ? 's' : ''} match filters
-                {(search.trim() || statusFilter !== 'all' || tableProfileFilter !== 'all') ? ' (filtered)' : ''}
+                {(search.trim() || statusFilter !== 'all' || tableProfileFilter !== 'all' || cvDateFrom || cvDateTo) ? ' (filtered)' : ''}
                 {statusFilter !== 'all' && (
                   <span> · status = {STATUS_CONFIG[statusFilter]?.label}</span>
                 )}
