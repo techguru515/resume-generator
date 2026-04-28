@@ -9,6 +9,7 @@ const STATUS_CONFIG = {
   interview: { label: 'Interview', color: 'bg-yellow-100 text-yellow-700' },
   offer:     { label: 'Offer',     color: 'bg-green-100 text-green-700' },
   rejected:  { label: 'Rejected',  color: 'bg-red-100 text-red-500' },
+  failed:    { label: 'Failed',    color: 'bg-rose-100 text-rose-700' },
 };
 
 const PAGE_SIZE = 10;

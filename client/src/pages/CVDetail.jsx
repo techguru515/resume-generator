@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { getCV, deleteCV, getProfileById, updateCVStatus, cvChat } from '../api.js';
+import { getCV, deleteCV, getProfileById, updateCVStatus, cvChat, downloadCoverLetterPdfUrl } from '../api.js';
 import { profileRefToIdString } from '../utils/profileRef.js';
 import CVPreview from '../components/CVPreview.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -12,6 +12,7 @@ const STATUS_CONFIG = {
   interview: { label: 'Interview', bg: 'bg-yellow-50',   text: 'text-yellow-700',  dot: 'bg-yellow-500',  border: 'border-yellow-300' },
   offer:     { label: 'Offer',     bg: 'bg-green-50',    text: 'text-green-700',   dot: 'bg-green-500',   border: 'border-green-300' },
   rejected:  { label: 'Rejected',  bg: 'bg-red-50',      text: 'text-red-600',     dot: 'bg-red-400',     border: 'border-red-300' },
+  failed:    { label: 'Failed',    bg: 'bg-rose-50',     text: 'text-rose-700',    dot: 'bg-rose-500',    border: 'border-rose-300' },
 };
 
 const ALL_STATUSES = Object.keys(STATUS_CONFIG);
@@ -35,6 +36,26 @@ async function downloadFile(url, filename) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(href);
+}
+
+async function copyToClipboard(text) {
+  const s = String(text || '');
+  if (!s) return;
+  try {
+    await navigator.clipboard.writeText(s);
+    return;
+  } catch {
+    // fallback below
+  }
+  const ta = document.createElement('textarea');
+  ta.value = s;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  ta.style.top = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  ta.remove();
 }
 
 function InfoCard({ label, value, highlight }) {
@@ -63,6 +84,7 @@ export default function CVDetail() {
   const [aiInput, setAiInput] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
+  const [activeTab, setActiveTab] = useState('ai');
 
   useEffect(() => {
     getCV(id)
@@ -78,6 +100,11 @@ export default function CVDetail() {
   async function handleDownload(type) {
     setDownloading(type);
     try {
+      if (type === 'cover-letter-pdf') {
+        const filename = `CoverLetter_${cv.company_name}_${cv.role_title}.pdf`.replace(/[^a-z0-9_.]/gi, '_');
+        await downloadFile(downloadCoverLetterPdfUrl(id), filename);
+        return;
+      }
       const ext = type === 'docx' ? 'docx' : 'pdf';
       const filename = `CV_${cv.company_name}_${cv.role_title}.${ext}`.replace(/[^a-z0-9_.]/gi, '_');
       await downloadFile(`/api/cv/${id}/download/${type}`, filename);
@@ -137,6 +164,15 @@ export default function CVDetail() {
 
   const status = cv.application_status || 'saved';
   const cfg = STATUS_CONFIG[status];
+  const hasJd = Boolean(String(cv.job_description || '').trim());
+  const hasCoverLetter = Boolean(String(cv.cover_letter || '').trim());
+
+  const tabs = [
+    { key: 'ai', label: 'AI Assistant', show: true },
+    { key: 'preview', label: 'CV Preview', show: true },
+    { key: 'jd', label: 'Job Description', show: hasJd },
+    { key: 'cover', label: 'Cover Letter', show: hasCoverLetter },
+  ].filter((t) => t.show);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -165,6 +201,14 @@ export default function CVDetail() {
                 className="bg-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-900 disabled:opacity-50 transition font-medium"
               >
                 {downloading === 'pdf' ? 'Downloading…' : 'Download PDF'}
+              </button>
+              <button
+                onClick={() => handleDownload('cover-letter-pdf')}
+                disabled={!!downloading || !cv.cover_letter}
+                className="bg-white text-primary text-sm px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 transition font-medium"
+                title={!cv.cover_letter ? 'No cover letter available for this CV.' : ''}
+              >
+                {downloading === 'cover-letter-pdf' ? 'Downloading…' : 'Download Cover Letter'}
               </button>
               <button
                 onClick={handleDelete}
@@ -258,84 +302,133 @@ export default function CVDetail() {
         )}
       </div>
 
-      {/* AI assistant */}
-      <div className="bg-white rounded-2xl shadow border border-gray-200 p-6 space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-bold text-primary">AI Assistant</h2>
-            <p className="text-xs text-gray-500">Uses this CV + the saved job description.</p>
+      {/* Detail tabs */}
+      <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
+        <div className="px-4 pt-4">
+          <div className="flex flex-wrap gap-2" role="tablist" aria-label="CV details tabs">
+            {tabs.map((t) => {
+              const active = activeTab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setActiveTab(t.key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                    active ? 'bg-primary text-white border-primary' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
-          <button
-            type="button"
-            onClick={() => { setAiMessages([]); setAiError(''); }}
-            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600"
-          >
-            Clear
-          </button>
         </div>
 
-        {aiError ? (
-          <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
-            {aiError}
-          </div>
-        ) : null}
-
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 h-64 overflow-auto space-y-2">
-          {aiMessages.length === 0 ? (
-            <p className="text-sm text-gray-500">
-              Try: “Rewrite my summary for this JD”, “List missing keywords”, “Improve bullet points for this role”.
-            </p>
-          ) : (
-            aiMessages.map((m, idx) => (
-              <div
-                key={idx}
-                className={`text-sm leading-relaxed rounded-lg px-3 py-2 border ${
-                  m.role === 'assistant'
-                    ? 'bg-white border-gray-200 text-gray-800'
-                    : 'bg-blue-50 border-blue-100 text-blue-900'
-                }`}
-              >
-                <div className="text-[11px] uppercase tracking-wide opacity-70 mb-1">
-                  {m.role === 'assistant' ? 'Assistant' : 'You'}
+        <div className="p-6">
+          {/* AI tab */}
+          {activeTab === 'ai' && (
+            <div className="space-y-4" role="tabpanel">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-bold text-primary">AI Assistant</h2>
+                  <p className="text-xs text-gray-500">Uses this CV + the saved job description.</p>
                 </div>
-                <div className="whitespace-pre-wrap">{m.content}</div>
+                <button
+                  type="button"
+                  onClick={() => { setAiMessages([]); setAiError(''); }}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600"
+                >
+                  Clear
+                </button>
               </div>
-            ))
+
+              {aiError ? (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
+                  {aiError}
+                </div>
+              ) : null}
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 h-64 overflow-auto space-y-2">
+                {aiMessages.length === 0 ? (
+                  <p className="text-sm text-gray-500">
+                    Try: “Rewrite my summary for this JD”, “List missing keywords”, “Improve bullet points for this role”.
+                  </p>
+                ) : (
+                  aiMessages.map((m, idx) => (
+                    <div
+                      key={idx}
+                      className={`text-sm leading-relaxed rounded-lg px-3 py-2 border ${
+                        m.role === 'assistant'
+                          ? 'bg-white border-gray-200 text-gray-800'
+                          : 'bg-blue-50 border-blue-100 text-blue-900'
+                      }`}
+                    >
+                      <div className="text-[11px] uppercase tracking-wide opacity-70 mb-1">
+                        {m.role === 'assistant' ? 'Assistant' : 'You'}
+                      </div>
+                      <div className="whitespace-pre-wrap">{m.content}</div>
+                    </div>
+                  ))
+                )}
+                {aiLoading ? <div className="text-sm text-gray-500 px-2 py-1">Thinking…</div> : null}
+              </div>
+
+              <form onSubmit={handleAskAi} className="flex gap-2">
+                <input
+                  value={aiInput}
+                  onChange={(e) => setAiInput(e.target.value)}
+                  placeholder="Ask something…"
+                  className="flex-1 px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  disabled={aiLoading}
+                />
+                <button
+                  type="submit"
+                  disabled={aiLoading || !String(aiInput || '').trim()}
+                  className="bg-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-900 disabled:opacity-50 transition font-medium"
+                >
+                  Send
+                </button>
+              </form>
+            </div>
           )}
-          {aiLoading ? <div className="text-sm text-gray-500 px-2 py-1">Thinking…</div> : null}
+
+          {/* Preview tab */}
+          {activeTab === 'preview' && (
+            <div role="tabpanel">
+              <h2 className="text-base font-bold text-primary mb-6 border-b pb-3">CV Preview</h2>
+              <CVPreview cvData={cv} profile={profile} />
+            </div>
+          )}
+
+          {/* JD tab */}
+          {activeTab === 'jd' && hasJd && (
+            <div role="tabpanel">
+              <h2 className="font-bold text-primary mb-3">Job Description</h2>
+              <pre className="text-xs text-gray-600 whitespace-pre-wrap font-sans leading-relaxed">{cv.job_description}</pre>
+            </div>
+          )}
+
+          {/* Cover tab */}
+          {activeTab === 'cover' && hasCoverLetter && (
+            <div role="tabpanel">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h2 className="font-bold text-primary">Cover Letter</h2>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(cv.cover_letter)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-700"
+                  title="Copy cover letter to clipboard"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre className="text-xs text-gray-600 whitespace-pre-wrap font-sans leading-relaxed">{cv.cover_letter}</pre>
+            </div>
+          )}
         </div>
-
-        <form onSubmit={handleAskAi} className="flex gap-2">
-          <input
-            value={aiInput}
-            onChange={(e) => setAiInput(e.target.value)}
-            placeholder="Ask something…"
-            className="flex-1 px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-200"
-            disabled={aiLoading}
-          />
-          <button
-            type="submit"
-            disabled={aiLoading || !String(aiInput || '').trim()}
-            className="bg-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-900 disabled:opacity-50 transition font-medium"
-          >
-            Send
-          </button>
-        </form>
       </div>
-
-      {/* Full CV Preview */}
-      <div className="bg-white rounded-2xl shadow p-8">
-        <h2 className="text-base font-bold text-primary mb-6 border-b pb-3">CV Preview</h2>
-        <CVPreview cvData={cv} profile={profile} />
-      </div>
-
-      {/* Job Description */}
-      {cv.job_description && (
-        <div className="bg-white rounded-2xl shadow p-6">
-          <h2 className="font-bold text-primary mb-3">Job Description</h2>
-          <pre className="text-xs text-gray-600 whitespace-pre-wrap font-sans leading-relaxed">{cv.job_description}</pre>
-        </div>
-      )}
     </div>
   );
 }

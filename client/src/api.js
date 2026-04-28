@@ -25,6 +25,7 @@ export const updateCVStatus = (id, status) =>
   api.post(`/cv/${encodeURIComponent(String(id))}/status`, { application_status: status }).then((r) => r.data);
 export const downloadDocxUrl = (id) => `/api/cv/${id}/download/docx`;
 export const downloadPdfUrl = (id) => `/api/cv/${id}/download/pdf`;
+export const downloadCoverLetterPdfUrl = (id) => `/api/cv/${id}/download/cover-letter/pdf`;
 
 // AI assistant
 export const cvChat = ({ cvId, message, history }) =>

@@ -1,7 +1,7 @@
 const CV = require('../models/CV');
 const Profile = require('../models/Profile');
 const { generateDocx } = require('../services/docxService');
-const { generatePdf } = require('../services/pdfService');
+const { generatePdf, generateCoverLetterPdf } = require('../services/pdfService');
 const { generateCvJsonWithOpenAI } = require('../services/openaiCvService');
 const path = require('path');
 const fs = require('fs/promises');
@@ -127,7 +127,7 @@ exports.update = async (req, res) => {
 exports.updateStatus = async (req, res) => {
   try {
     const { application_status } = req.body || {};
-    const allowed = ['saved', 'applied', 'interview', 'offer', 'rejected'];
+    const allowed = ['saved', 'applied', 'interview', 'offer', 'rejected', 'failed'];
     if (!allowed.includes(application_status))
       return res.status(400).json({ error: 'Invalid status' });
     const cv = await CV.findOneAndUpdate(
@@ -200,5 +200,28 @@ exports.downloadPdf = async (req, res) => {
   } catch (err) {
     console.error('downloadPdf:', err?.stack || err);
     res.status(500).json({ error: err.message || 'PDF download failed' });
+  }
+};
+
+// GET /api/cv/:id/download/cover-letter/pdf
+exports.downloadCoverLetterPdf = async (req, res) => {
+  try {
+    const cv = await CV.findOne({ _id: req.params.id, ...ownerFilter(req) });
+    if (!cv) return res.status(404).json({ error: 'CV not found' });
+    const profile = await Profile.findById(rawProfileIdRef(cv.profileId));
+    if (!profile) return res.status(404).json({ error: 'Profile not found for this CV' });
+
+    const buffer = await generateCoverLetterPdf(cv.toObject(), profile.toObject());
+    const filename = `${safeBaseName(profile.name)} - Cover Letter.pdf`;
+    await saveDownloadCopy({ buffer, filename });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.end(buffer);
+  } catch (err) {
+    console.error('downloadCoverLetterPdf:', err?.stack || err);
+    const msg = err.message || 'Cover letter PDF download failed';
+    res.status(msg.includes('No cover letter available') ? 400 : 500).json({ error: msg });
   }
 };

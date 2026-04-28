@@ -41,6 +41,7 @@ Otherwise include these top-level keys with these types:
   - If workExperiences has one or more entries: output experience1, experience2, … as arrays of bullet strings in the same order only; do not invent employer names or titles for those rows.
   - If workExperiences is empty: output synthetic role1, experience1, and optionally role2/experience2, role3/experience3 (up to three blocks), with optional companyN and dateN strings.
 - job_description (string; short JD summary or "")
+- cover_letter (string; a tailored cover letter body; no markdown; plain text; can include line breaks; 150–250 words)
 
 Do not add keys outside this contract unless they are nested under experiences or skills as described.`;
 
@@ -233,7 +234,8 @@ FULL SCHEMA (when not blocked):
   "summary": "${cfg.summarySentencesMin}–${cfg.summarySentencesMax} sentences, first person (I). Highlight JD strengths. ${summaryYears} ATS-friendly, clear, not keyword-stuffed.",
   "skills": { "category_snake_case": ["skill", "..."], "...": [] },
   "experiences": { },
-  "job_description": "short cleaned summary of the role from the JD; may be empty string"
+  "job_description": "short cleaned summary of the role from the JD; may be empty string",
+  "cover_letter": "plain text cover letter body tailored to the JD, candidate profile and experience bullets; no markdown"
 }
 
 job_type: use Permanent unless the posting clearly indicates contract / fixed-term / day rate.
@@ -395,6 +397,7 @@ function normalizePayload(parsed, profile, jobDescriptionText) {
     skills,
     experiences,
     job_description: String(parsed.job_description || '').trim(),
+    cover_letter: String(parsed.cover_letter || '').trim(),
   };
 }
 

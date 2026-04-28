@@ -14,6 +14,7 @@ export default function CreateCV() {
   const [jobLink, setJobLink] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [preview, setPreview] = useState(null);
+  const [coverLetter, setCoverLetter] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
@@ -59,9 +60,11 @@ export default function CreateCV() {
         profileId: selectedProfileId,
       });
       setPreview(data);
+      setCoverLetter(String(data?.cover_letter || '').trim());
     } catch (err) {
       setError(err.response?.data?.error || err.message);
       setPreview(null);
+      setCoverLetter('');
     } finally {
       setAiLoading(false);
     }
@@ -74,6 +77,7 @@ export default function CreateCV() {
     try {
       const saved = await saveCV({
         ...preview,
+        cover_letter: coverLetter,
         profileId: selectedProfileId,
         job_link: jobLink,
       });
@@ -194,6 +198,15 @@ export default function CreateCV() {
 
           {preview && (
             <div className="bg-white rounded-2xl shadow p-5">
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Cover letter (generated)</label>
+              <p className="text-xs text-gray-400 mb-2">You can edit this before saving.</p>
+              <textarea
+                value={coverLetter}
+                onChange={(e) => setCoverLetter(e.target.value)}
+                rows={10}
+                className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-y"
+                placeholder="Cover letter will appear here after generation…"
+              />
               <button
                 type="button"
                 onClick={handleSave}

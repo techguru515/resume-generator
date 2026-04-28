@@ -11,6 +11,7 @@ const STATUS_CONFIG = {
   interview: { label: 'Interview', badge: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-500' },
   offer:     { label: 'Offer',     badge: 'bg-green-100 text-green-700',  dot: 'bg-green-500' },
   rejected:  { label: 'Rejected',  badge: 'bg-red-100 text-red-500',      dot: 'bg-red-400' },
+  failed:    { label: 'Failed',    badge: 'bg-rose-100 text-rose-700',    dot: 'bg-rose-500' },
 };
 
 function StatusBadge({ status }) {
@@ -50,6 +51,14 @@ function LinkSelectIcon({ checked, indeterminate = false }) {
 
 function openCvInNewWindow(cvId) {
   window.open(`/cv/${cvId}`, '_blank', 'noopener,noreferrer');
+}
+
+function escapeHtmlAttr(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 function TrashIcon({ className = 'w-4 h-4' }) {
@@ -562,6 +571,58 @@ export default function Workspace() {
 
   const selectedLinkSet = useMemo(() => new Set(selectedLinkIds.map(String)), [selectedLinkIds]);
 
+  const exportSelectedLinkUrls = useCallback(() => {
+    const urlById = new Map(
+      (Array.isArray(savedLinks) ? savedLinks : []).map((l) => [String(l._id), String(l.url || '').trim()])
+    );
+    const urls = selectedLinkIds.map((id) => urlById.get(String(id))).filter((u) => u && u.length > 0);
+    if (urls.length === 0) {
+      window.alert('No URLs found for the selected links.');
+      return;
+    }
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const items = urls
+      .map((u) => {
+        const href = escapeHtmlAttr(u);
+        const label = escapeHtmlAttr(u);
+        return `<li class="row"><a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a></li>`;
+      })
+      .join('\n');
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Exported URLs — ${escapeHtmlAttr(dateStr)}</title>
+  <style>
+    body { font-family: system-ui, Segoe UI, Roboto, sans-serif; margin: 2rem; color: #111827; background: #f9fafb; }
+    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+    p.meta { font-size: 0.875rem; color: #6b7280; margin-bottom: 1.25rem; }
+    ol { margin: 0; padding-left: 1.25rem; }
+    li.row { margin: 0.5rem 0; word-break: break-all; }
+    a { color: #2563eb; text-decoration: underline; }
+    a:hover { color: #1d4ed8; }
+  </style>
+</head>
+<body>
+  <h1>Exported job links</h1>
+  <p class="meta">${urls.length} URL${urls.length !== 1 ? 's' : ''} · ${escapeHtmlAttr(dateStr)}</p>
+  <ol>
+${items}
+  </ol>
+</body>
+</html>`;
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = `workspace-urls-${dateStr}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(href);
+  }, [selectedLinkIds, savedLinks]);
+
   const allPageLinksSelected =
     paginatedLinkRows.length > 0 && paginatedLinkRows.every((r) => selectedLinkSet.has(String(r.key)));
   const somePageLinksSelected =
@@ -753,20 +814,6 @@ export default function Workspace() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 relative">
-      {generatingLinks && (
-        <div
-          className="fixed inset-0 z-50 bg-white/70 backdrop-blur-[2px] flex items-center justify-center"
-          role="status"
-          aria-live="polite"
-          aria-label="Generating resumes…"
-        >
-          <div className="flex flex-col items-center gap-3 rounded-2xl border border-gray-200 bg-white px-6 py-5 shadow-sm">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-violet-600" />
-            <p className="text-sm font-semibold text-primary">Generating resumes…</p>
-            <p className="text-xs text-gray-500">Please wait.</p>
-          </div>
-        </div>
-      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-bold text-primary">Workspace</h2>
         <button
@@ -988,6 +1035,15 @@ export default function Workspace() {
                       title="Generate CVs for selected links"
                     >
                       {generatingLinks ? 'Generating…' : 'Generate CV'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deletingLinks || generatingLinks}
+                      onClick={exportSelectedLinkUrls}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+                      title="Download selected URLs as an HTML file (clickable list)"
+                    >
+                      Export selected URLs
                     </button>
                     <button
                       type="button"

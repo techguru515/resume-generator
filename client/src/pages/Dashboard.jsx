@@ -14,13 +14,14 @@ const STATUS_CONFIG = {
   interview: { label: 'Interview', color: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-500' },
   offer:     { label: 'Offer',     color: 'bg-green-100 text-green-700',  dot: 'bg-green-500' },
   rejected:  { label: 'Rejected',  color: 'bg-red-100 text-red-500',      dot: 'bg-red-400' },
+  failed:    { label: 'Failed',    color: 'bg-rose-100 text-rose-700',    dot: 'bg-rose-500' },
 };
 
 const ALL_STATUSES = Object.keys(STATUS_CONFIG);
 const PAGE_SIZE = 5;
 
 const CHART_COLORS = {
-  saved: '#9ca3af', applied: '#3b82f6', interview: '#f59e0b', offer: '#22c55e', rejected: '#ef4444',
+  saved: '#9ca3af', applied: '#3b82f6', interview: '#f59e0b', offer: '#22c55e', rejected: '#ef4444', failed: '#f43f5e',
 };
 
 function StatusBadge({ status }) {
@@ -34,15 +35,28 @@ function StatusBadge({ status }) {
 }
 
 function ProfileCard({ profile, cvs, onStatusChange, onDelete, navigate }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [page, setPage] = useState(1);
 
+  const sortedCvs = [...cvs].sort((a, b) => {
+    const aStatus = a?.application_status || 'saved';
+    const bStatus = b?.application_status || 'saved';
+    const aIsSaved = aStatus === 'saved';
+    const bIsSaved = bStatus === 'saved';
+    if (aIsSaved !== bIsSaved) return aIsSaved ? -1 : 1; // Saved first
+
+    const aTime = Date.parse(a?.createdAt || a?.updatedAt || 0) || 0;
+    const bTime = Date.parse(b?.createdAt || b?.updatedAt || 0) || 0;
+    if (bTime !== aTime) return bTime - aTime; // newest first
+    return String(b?._id || '').localeCompare(String(a?._id || '')); // tie-breaker
+  });
+
   const counts = ALL_STATUSES.reduce((acc, s) => {
-    acc[s] = cvs.filter((c) => (c.application_status || 'saved') === s).length;
+    acc[s] = sortedCvs.filter((c) => (c.application_status || 'saved') === s).length;
     return acc;
   }, {});
 
-  const paginated = cvs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paginated = sortedCvs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="bg-white rounded-2xl shadow border border-gray-100 overflow-hidden">
@@ -55,7 +69,7 @@ function ProfileCard({ profile, cvs, onStatusChange, onDelete, navigate }) {
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-bold text-primary">{profile.label}</h3>
             <span className="text-xs text-gray-400 border border-gray-200 rounded-full px-2 py-0.5">
-              {cvs.length} CV{cvs.length !== 1 ? 's' : ''}
+              {sortedCvs.length} CV{sortedCvs.length !== 1 ? 's' : ''}
             </span>
           </div>
           <p className="text-sm text-gray-500 mt-0.5">{profile.name} · {profile.email}</p>
@@ -76,7 +90,7 @@ function ProfileCard({ profile, cvs, onStatusChange, onDelete, navigate }) {
       {/* CV rows */}
       {!collapsed && (
         <div className="border-t">
-          {cvs.length === 0 ? (
+          {sortedCvs.length === 0 ? (
             <p className="px-6 py-4 text-sm text-gray-400 italic">No CVs saved with this profile yet.</p>
           ) : (
             <>
@@ -139,7 +153,7 @@ function ProfileCard({ profile, cvs, onStatusChange, onDelete, navigate }) {
                 ))}
               </div>
               <div className="px-6 pb-3">
-                <Pagination page={page} total={cvs.length} pageSize={PAGE_SIZE} onChange={setPage} />
+                <Pagination page={page} total={sortedCvs.length} pageSize={PAGE_SIZE} onChange={setPage} />
               </div>
             </>
           )}

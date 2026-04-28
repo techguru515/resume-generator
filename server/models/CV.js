@@ -22,10 +22,11 @@ const CVSchema = new mongoose.Schema(
     experiences: { type: mongoose.Schema.Types.Mixed, default: {} },
     job_link: { type: String, default: '' },
     job_description: { type: String },
+    cover_letter: { type: String, default: '' },
     jobDescriptionId: { type: 'ObjectId', ref: 'JobDescription', default: null },
     application_status: {
       type: String,
-      enum: ['saved', 'applied', 'interview', 'offer', 'rejected'],
+      enum: ['saved', 'applied', 'interview', 'offer', 'rejected', 'failed'],
       default: 'saved',
     },
     userId: { type: 'ObjectId', ref: 'User' },

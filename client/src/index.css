@@ -2,8 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Allow normal text selection across the app. */
 * {
-  user-select: none;
+  user-select: text;
 }
 
 body {

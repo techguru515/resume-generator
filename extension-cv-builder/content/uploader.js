@@ -3,7 +3,7 @@
  *
  * Messages:
  * - { type: 'SCAN_FILE_INPUTS' } -> { success, inputs: [{ input_id, name, accept, type }] }
- * - { type: 'UPLOAD_FILE', inputId, fileData(base64), fileName } -> { success }
+ * - { type: 'UPLOAD_FILE', inputId, fileData(base64), fileName, mimeType? } -> { success }
  */
 
 (() => {
@@ -56,7 +56,7 @@
         }
 
         if (msg?.type === 'UPLOAD_FILE') {
-          const { inputId, fileData, fileName } = msg || {};
+          const { inputId, fileData, fileName, mimeType } = msg || {};
           const inputs = allFileInputs();
           const idx = Number(String(inputId || '').replace(/^file-/, ''));
           const el = inputs[idx];
@@ -64,7 +64,11 @@
             sendResponse({ success: false, error: 'File input not found' });
             return;
           }
-          const file = await base64ToFile(String(fileData || ''), String(fileName || 'CV.pdf'), 'application/pdf');
+          const file = await base64ToFile(
+            String(fileData || ''),
+            String(fileName || 'CV.pdf'),
+            String(mimeType || 'application/pdf')
+          );
           await attachFileToInput(el, file);
           sendResponse({ success: true });
           return;

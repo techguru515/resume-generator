@@ -26,7 +26,10 @@ const saveJdBtn = $('saveJdBtn');
 const generateBtn = $('generateBtn');
 const downloadPdfBtn = $('downloadPdfBtn');
 const downloadDocxBtn = $('downloadDocxBtn');
+const downloadCoverLetterBtn = $('downloadCoverLetterBtn');
+const copyCoverLetterBtn = $('copyCoverLetterBtn');
 const autoUploadBtn = $('autoUploadBtn');
+const autoUploadCoverBtn = $('autoUploadCoverBtn');
 
 const tabGenerateBtn = $('tabGenerate');
 const tabDownloadBtn = $('tabDownload');
@@ -255,7 +258,10 @@ async function checkCurrentUrl() {
     setStatus('Not saved yet. Click “Save link”.', 'bad');
     downloadPdfBtn.disabled = true;
     downloadDocxBtn.disabled = true;
+    downloadCoverLetterBtn.disabled = true;
+    copyCoverLetterBtn.disabled = true;
     autoUploadBtn.disabled = true;
+    autoUploadCoverBtn.disabled = true;
     aiAskBtn.disabled = true;
     return;
   }
@@ -269,25 +275,37 @@ async function checkCurrentUrl() {
     setStatus(`Saved · JD ${hasJd ? '✓' : '✗'} · Profile ${hasProfile ? '✓' : '✗'} · CV available`, 'ok');
     downloadPdfBtn.disabled = false;
     downloadDocxBtn.disabled = false;
+    downloadCoverLetterBtn.disabled = false;
+    copyCoverLetterBtn.disabled = false;
     autoUploadBtn.disabled = false;
+    autoUploadCoverBtn.disabled = false;
     aiAskBtn.disabled = false;
   } else if (s === 'pending') {
     setStatus(`Saved · JD ${hasJd ? '✓' : '✗'} · Profile ${hasProfile ? '✓' : '✗'} · Generating…`, 'warn');
     downloadPdfBtn.disabled = true;
     downloadDocxBtn.disabled = true;
+    downloadCoverLetterBtn.disabled = true;
+    copyCoverLetterBtn.disabled = true;
     autoUploadBtn.disabled = true;
+    autoUploadCoverBtn.disabled = true;
     aiAskBtn.disabled = true;
   } else if (s === 'failed') {
     setStatus(`Saved · JD ${hasJd ? '✓' : '✗'} · Profile ${hasProfile ? '✓' : '✗'} · Generation failed`, 'bad');
     downloadPdfBtn.disabled = true;
     downloadDocxBtn.disabled = true;
+    downloadCoverLetterBtn.disabled = true;
+    copyCoverLetterBtn.disabled = true;
     autoUploadBtn.disabled = true;
+    autoUploadCoverBtn.disabled = true;
     aiAskBtn.disabled = true;
   } else {
     setStatus(`Saved · JD ${hasJd ? '✓' : '✗'} · Profile ${hasProfile ? '✓' : '✗'} · No CV yet`, 'warn');
     downloadPdfBtn.disabled = true;
     downloadDocxBtn.disabled = true;
+    downloadCoverLetterBtn.disabled = true;
+    copyCoverLetterBtn.disabled = true;
     autoUploadBtn.disabled = true;
+    autoUploadCoverBtn.disabled = true;
     aiAskBtn.disabled = true;
   }
 }
@@ -432,6 +450,74 @@ async function downloadCv(kind) {
   setMsg('Downloaded.');
 }
 
+async function downloadCoverLetterPdf() {
+  if (!state.link?.cvId) throw new Error('No CV id available yet.');
+  const endpoint = `/cv/${state.link.cvId}/download/cover-letter/pdf`;
+  const bust = `t=${Date.now()}`;
+  setMsg('Downloading cover letter PDF…');
+  await apiFetch('/auth/me', { method: 'GET' });
+  const res = await fetch(`${state.apiBase}${endpoint}?${bust}`, {
+    headers: { Authorization: `Bearer ${state.token}` },
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+    const msg = data?.error || text || `HTTP ${res.status}`;
+    throw new Error(`Download failed: ${msg}`);
+  }
+  const cd = res.headers.get('content-disposition') || '';
+  const blob = await res.blob();
+  const objUrl = URL.createObjectURL(blob);
+  const filename = filenameFromContentDisposition(cd) || 'Cover Letter.pdf';
+  const safeFilename = sanitizeDownloadFilename(filename);
+
+  if (chrome.downloads?.download) {
+    try {
+      await downloadsDownload({ url: objUrl, filename: safeFilename });
+      setTimeout(() => URL.revokeObjectURL(objUrl), 30_000);
+      setMsg('Downloaded.');
+      return;
+    } catch {
+      // fallback below
+    }
+  }
+
+  const a = document.createElement('a');
+  a.href = objUrl;
+  a.download = safeFilename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(objUrl), 30_000);
+  setMsg('Downloaded.');
+}
+
+async function copyCoverLetter() {
+  if (!state.link?.cvId) throw new Error('No CV id available yet.');
+  setMsg('Copying cover letter…');
+  await apiFetch('/auth/me', { method: 'GET' });
+  const cv = await apiFetch(`/cv/${encodeURIComponent(String(state.link.cvId))}`, { method: 'GET' });
+  const txt = String(cv?.cover_letter || '').trim();
+  if (!txt) throw new Error('No cover letter available for this CV.');
+  try {
+    await navigator.clipboard.writeText(txt);
+  } catch {
+    // Fallback for older clipboard permissions: use a temporary textarea.
+    const ta = document.createElement('textarea');
+    ta.value = txt;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+  setMsg('Copied.');
+}
+
 async function autoUploadPdf() {
   if (!state.link?.cvId) throw new Error('No CV available yet.');
   const tabUrl = await getActiveTabUrl();
@@ -476,6 +562,57 @@ async function autoUploadPdf() {
     inputId,
     fileData: base64,
     fileName,
+    mimeType: 'application/pdf',
+  });
+  if (!up?.success) throw new Error(up?.error || 'Upload failed');
+  setMsg('Uploaded. If the site needs a submit, click it on the page.');
+}
+
+async function autoUploadCoverLetterPdf() {
+  if (!state.link?.cvId) throw new Error('No CV available yet.');
+  const tabUrl = await getActiveTabUrl();
+  if (!tabUrl) throw new Error('No active tab.');
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) throw new Error('No active tab id.');
+
+  setMsg('Scanning page for upload fields…');
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    files: ['content/uploader.js'],
+  });
+  const scan = await chrome.tabs.sendMessage(tab.id, { type: 'SCAN_FILE_INPUTS' });
+  if (!scan?.success) throw new Error(scan?.error || 'Failed to scan file inputs');
+  if (!scan.inputs?.length) throw new Error('No file upload inputs found on this page.');
+
+  setMsg('Downloading cover letter PDF…');
+  const apiBase = state.apiBase.replace(/\/+$/, '');
+  const bust = `t=${Date.now()}`;
+  await apiFetch('/auth/me', { method: 'GET' });
+  const res = await fetch(`${apiBase}/cv/${state.link.cvId}/download/cover-letter/pdf?${bust}`, {
+    headers: { Authorization: `Bearer ${state.token}` },
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+    const msg = data?.error || text || `HTTP ${res.status}`;
+    throw new Error(`Download failed: ${msg}`);
+  }
+  const cd = res.headers.get('content-disposition') || '';
+  const blob = await res.blob();
+
+  const base64 = await blobToBase64(blob);
+  const fileName = filenameFromContentDisposition(cd) || 'Cover Letter.pdf';
+
+  setMsg('Uploading into the page…');
+  const inputId = scan.inputs[0].input_id; // naive: first file input
+  const up = await chrome.tabs.sendMessage(tab.id, {
+    type: 'UPLOAD_FILE',
+    inputId,
+    fileData: base64,
+    fileName,
+    mimeType: 'application/pdf',
   });
   if (!up?.success) throw new Error(up?.error || 'Upload failed');
   setMsg('Uploaded. If the site needs a submit, click it on the page.');
@@ -591,7 +728,10 @@ saveJdBtn.addEventListener('click', () => run(saveJd));
 generateBtn.addEventListener('click', () => run(generateCv));
 downloadPdfBtn.addEventListener('click', () => run(() => downloadCv('pdf')));
 downloadDocxBtn.addEventListener('click', () => run(() => downloadCv('docx')));
+downloadCoverLetterBtn?.addEventListener('click', () => run(downloadCoverLetterPdf));
+copyCoverLetterBtn?.addEventListener('click', () => run(copyCoverLetter));
 autoUploadBtn.addEventListener('click', () => run(autoUploadPdf));
+autoUploadCoverBtn?.addEventListener('click', () => run(autoUploadCoverLetterPdf));
 aiAskBtn.addEventListener('click', () => run(askAi));
 
 tabGenerateBtn?.addEventListener('click', () => setActiveTab('generate'));

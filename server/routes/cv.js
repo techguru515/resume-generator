@@ -12,6 +12,7 @@ router.post('/:id/status', ctrl.updateStatus);
 router.patch('/:id/status', ctrl.updateStatus);
 router.get('/:id/download/docx', ctrl.downloadDocx);
 router.get('/:id/download/pdf', ctrl.downloadPdf);
+router.get('/:id/download/cover-letter/pdf', ctrl.downloadCoverLetterPdf);
 router.get('/:id', ctrl.getOne);
 router.put('/:id', ctrl.update);
 router.delete('/:id', ctrl.remove);

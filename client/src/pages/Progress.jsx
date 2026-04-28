@@ -18,6 +18,7 @@ const STATUS_CONFIG = {
   interview: { label: 'Interview', bg: 'bg-yellow-50', border: 'border-yellow-200', heading: 'text-yellow-700', dot: 'bg-yellow-500', badge: 'bg-yellow-100 text-yellow-700', chart: '#f59e0b' },
   offer:     { label: 'Offer',     bg: 'bg-green-50',  border: 'border-green-200',  heading: 'text-green-700',  dot: 'bg-green-500',  badge: 'bg-green-100 text-green-700',   chart: '#22c55e' },
   rejected:  { label: 'Rejected',  bg: 'bg-red-50',    border: 'border-red-200',    heading: 'text-red-600',    dot: 'bg-red-400',    badge: 'bg-red-100 text-red-500',      chart: '#ef4444' },
+  failed:    { label: 'Failed',    bg: 'bg-rose-50',   border: 'border-rose-200',   heading: 'text-rose-700',   dot: 'bg-rose-500',   badge: 'bg-rose-100 text-rose-700',    chart: '#f43f5e' },
 };
 
 const ALL_STATUSES = Object.keys(STATUS_CONFIG);
