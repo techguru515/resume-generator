@@ -9,11 +9,10 @@ import {
 import Pagination from '../components/Pagination.jsx';
 
 const STATUS_CONFIG = {
-  saved:     { label: 'Saved',     color: 'bg-gray-100 text-gray-600',    dot: 'bg-gray-400' },
+  saved:     { label: 'Created',   color: 'bg-gray-100 text-gray-600',    dot: 'bg-gray-400' },
   applied:   { label: 'Applied',   color: 'bg-blue-100 text-blue-700',    dot: 'bg-blue-500' },
   interview: { label: 'Interview', color: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-500' },
   offer:     { label: 'Offer',     color: 'bg-green-100 text-green-700',  dot: 'bg-green-500' },
-  rejected:  { label: 'Rejected',  color: 'bg-red-100 text-red-500',      dot: 'bg-red-400' },
   failed:    { label: 'Failed',    color: 'bg-rose-100 text-rose-700',    dot: 'bg-rose-500' },
 };
 
@@ -21,7 +20,7 @@ const ALL_STATUSES = Object.keys(STATUS_CONFIG);
 const PAGE_SIZE = 5;
 
 const CHART_COLORS = {
-  saved: '#9ca3af', applied: '#3b82f6', interview: '#f59e0b', offer: '#22c55e', rejected: '#ef4444', failed: '#f43f5e',
+  saved: '#9ca3af', applied: '#3b82f6', interview: '#f59e0b', offer: '#22c55e', failed: '#f43f5e',
 };
 
 function StatusBadge({ status }) {

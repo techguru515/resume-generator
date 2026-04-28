@@ -127,7 +127,7 @@ exports.update = async (req, res) => {
 exports.updateStatus = async (req, res) => {
   try {
     const { application_status } = req.body || {};
-    const allowed = ['saved', 'applied', 'interview', 'offer', 'rejected', 'failed'];
+    const allowed = ['saved', 'applied', 'interview', 'offer', 'failed'];
     if (!allowed.includes(application_status))
       return res.status(400).json({ error: 'Invalid status' });
     const cv = await CV.findOneAndUpdate(

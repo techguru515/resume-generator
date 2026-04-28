@@ -7,11 +7,10 @@ import CVPreview from '../components/CVPreview.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const STATUS_CONFIG = {
-  saved:     { label: 'Saved',     bg: 'bg-gray-100',    text: 'text-gray-600',    dot: 'bg-gray-400',    border: 'border-gray-300' },
+  saved:     { label: 'Created',   bg: 'bg-gray-100',    text: 'text-gray-600',    dot: 'bg-gray-400',    border: 'border-gray-300' },
   applied:   { label: 'Applied',   bg: 'bg-blue-50',     text: 'text-blue-700',    dot: 'bg-blue-500',    border: 'border-blue-300' },
   interview: { label: 'Interview', bg: 'bg-yellow-50',   text: 'text-yellow-700',  dot: 'bg-yellow-500',  border: 'border-yellow-300' },
   offer:     { label: 'Offer',     bg: 'bg-green-50',    text: 'text-green-700',   dot: 'bg-green-500',   border: 'border-green-300' },
-  rejected:  { label: 'Rejected',  bg: 'bg-red-50',      text: 'text-red-600',     dot: 'bg-red-400',     border: 'border-red-300' },
   failed:    { label: 'Failed',    bg: 'bg-rose-50',     text: 'text-rose-700',    dot: 'bg-rose-500',    border: 'border-rose-300' },
 };
 

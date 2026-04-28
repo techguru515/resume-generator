@@ -32,6 +32,20 @@ async function seedAdmin() {
   }
 }
 
+async function migrateRejectedToFailed() {
+  try {
+    const CV = require('./models/CV');
+    const res = await CV.updateMany(
+      { application_status: 'rejected' },
+      { $set: { application_status: 'failed' } }
+    );
+    const modified = res?.modifiedCount ?? res?.nModified ?? 0;
+    if (modified > 0) console.log(`Migrated ${modified} CV(s) from rejected -> failed`);
+  } catch (e) {
+    console.error('Rejected status migration error:', e?.message || e);
+  }
+}
+
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/cv_builder';
 let server;
@@ -61,6 +75,7 @@ mongoose
   .then(async () => {
     console.log('MongoDB connected');
     await seedAdmin();
+    await migrateRejectedToFailed();
     try {
       const User = require('./models/User');
       const admin = await User.findOne({ role: 'admin' }).select('_id');

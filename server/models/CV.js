@@ -26,7 +26,7 @@ const CVSchema = new mongoose.Schema(
     jobDescriptionId: { type: 'ObjectId', ref: 'JobDescription', default: null },
     application_status: {
       type: String,
-      enum: ['saved', 'applied', 'interview', 'offer', 'rejected', 'failed'],
+      enum: ['saved', 'applied', 'interview', 'offer', 'failed'],
       default: 'saved',
     },
     userId: { type: 'ObjectId', ref: 'User' },

@@ -4,11 +4,10 @@ import { adminListCVs } from '../api.js';
 import Pagination from '../components/Pagination.jsx';
 
 const STATUS_CONFIG = {
-  saved:     { label: 'Saved',     color: 'bg-gray-100 text-gray-600' },
+  saved:     { label: 'Created',   color: 'bg-gray-100 text-gray-600' },
   applied:   { label: 'Applied',   color: 'bg-blue-100 text-blue-700' },
   interview: { label: 'Interview', color: 'bg-yellow-100 text-yellow-700' },
   offer:     { label: 'Offer',     color: 'bg-green-100 text-green-700' },
-  rejected:  { label: 'Rejected',  color: 'bg-red-100 text-red-500' },
   failed:    { label: 'Failed',    color: 'bg-rose-100 text-rose-700' },
 };
 

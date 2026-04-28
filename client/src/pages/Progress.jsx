@@ -13,11 +13,10 @@ import { listCVs, updateCVStatus } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const STATUS_CONFIG = {
-  saved:     { label: 'Saved',     bg: 'bg-gray-50',   border: 'border-gray-200',   heading: 'text-gray-600',   dot: 'bg-gray-400',   badge: 'bg-gray-100 text-gray-600',    chart: '#9ca3af' },
+  saved:     { label: 'Created',   bg: 'bg-gray-50',   border: 'border-gray-200',   heading: 'text-gray-600',   dot: 'bg-gray-400',   badge: 'bg-gray-100 text-gray-600',    chart: '#9ca3af' },
   applied:   { label: 'Applied',   bg: 'bg-blue-50',   border: 'border-blue-200',   heading: 'text-blue-700',   dot: 'bg-blue-500',   badge: 'bg-blue-100 text-blue-700',    chart: '#3b82f6' },
   interview: { label: 'Interview', bg: 'bg-yellow-50', border: 'border-yellow-200', heading: 'text-yellow-700', dot: 'bg-yellow-500', badge: 'bg-yellow-100 text-yellow-700', chart: '#f59e0b' },
   offer:     { label: 'Offer',     bg: 'bg-green-50',  border: 'border-green-200',  heading: 'text-green-700',  dot: 'bg-green-500',  badge: 'bg-green-100 text-green-700',   chart: '#22c55e' },
-  rejected:  { label: 'Rejected',  bg: 'bg-red-50',    border: 'border-red-200',    heading: 'text-red-600',    dot: 'bg-red-400',    badge: 'bg-red-100 text-red-500',      chart: '#ef4444' },
   failed:    { label: 'Failed',    bg: 'bg-rose-50',   border: 'border-rose-200',   heading: 'text-rose-700',   dot: 'bg-rose-500',   badge: 'bg-rose-100 text-rose-700',    chart: '#f43f5e' },
 };
 
@@ -216,7 +215,7 @@ export default function Progress() {
           <div className="flex rounded-full overflow-hidden h-3">
             {ALL_STATUSES.map((s) => {
               const pct = (grouped[s].length / total) * 100;
-              const colors = { saved: 'bg-gray-300', applied: 'bg-blue-400', interview: 'bg-yellow-400', offer: 'bg-green-500', rejected: 'bg-red-400' };
+              const colors = { saved: 'bg-gray-300', applied: 'bg-blue-400', interview: 'bg-yellow-400', offer: 'bg-green-500' };
               if (pct === 0) return null;
               return <div key={s} style={{ width: `${pct}%` }} className={`${colors[s]} transition-all`} title={`${STATUS_CONFIG[s].label}: ${grouped[s].length}`} />;
             })}

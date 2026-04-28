@@ -5,11 +5,10 @@ import {
 import { adminStats, adminListCVs } from '../api.js';
 
 const STATUS_CONFIG = {
-  saved:     { label: 'Saved',     color: 'bg-gray-100 text-gray-600',     chart: '#9ca3af' },
+  saved:     { label: 'Created',   color: 'bg-gray-100 text-gray-600',     chart: '#9ca3af' },
   applied:   { label: 'Applied',   color: 'bg-blue-100 text-blue-700',     chart: '#3b82f6' },
   interview: { label: 'Interview', color: 'bg-yellow-100 text-yellow-700', chart: '#f59e0b' },
   offer:     { label: 'Offer',     color: 'bg-green-100 text-green-700',   chart: '#22c55e' },
-  rejected:  { label: 'Rejected',  color: 'bg-red-100 text-red-500',       chart: '#ef4444' },
   failed:    { label: 'Failed',    color: 'bg-rose-100 text-rose-700',     chart: '#f43f5e' },
 };
 
@@ -19,7 +18,7 @@ function buildChartData(cvs) {
   const map = {};
   cvs.forEach((cv) => {
     const date = new Date(cv.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    if (!map[date]) map[date] = { date, saved: 0, applied: 0, interview: 0, offer: 0, rejected: 0, failed: 0 };
+    if (!map[date]) map[date] = { date, saved: 0, applied: 0, interview: 0, offer: 0, failed: 0 };
     const s = cv.application_status || 'saved';
     map[date][s] = (map[date][s] || 0) + 1;
   });
