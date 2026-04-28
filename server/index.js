@@ -49,8 +49,8 @@ async function migrateRejectedToFailed() {
   }
 }
 
-const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/cv_builder';
+const PORT = process.env.PORT;
+const MONGO_URI = process.env.MONGODB_URI;
 let server;
 
 async function shutdown(signal) {
