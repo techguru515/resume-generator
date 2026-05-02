@@ -559,6 +559,9 @@ export default function ProfilePage() {
                   Or use a folder <strong>relative to the project root</strong> (no <code className="text-[11px]">..</code> outside the project).
                   After downloading a CV, the CV page shows the resolved server path for the last save.
                   Hosted environments often use an ephemeral disk unless you add persistent storage.
+                  <strong className="text-gray-700"> Your PC’s Downloads folder comes from the browser only</strong> — the server cannot write directly to{' '}
+                  <code className="text-[11px]">D:\...</code>. To keep CVs only on your machine via the hosted app, rely on downloads, or deploy the API on your own Windows PC, or disable server-side copies (
+                  <code className="text-[11px]">CV_DISABLE_SERVER_COPY=true</code> on Railway).
                 </p>
                 <label htmlFor="cvSaveFolder" className="block text-xs font-semibold text-gray-700">
                   Save folder path

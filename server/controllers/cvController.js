@@ -7,6 +7,11 @@ const path = require('path');
 const fs = require('fs/promises');
 const { resolveCvSaveDir, getDefaultCvSaveDir } = require('../utils/cvSavePath');
 
+function serverCvCopyDisabled() {
+  const v = String(process.env.CV_DISABLE_SERVER_COPY || '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
 function safeBaseName(name) {
   const s = String(name || '').trim() || 'CV';
   return s
@@ -26,6 +31,10 @@ function setCvCopyPathHeader(res, meta) {
 }
 
 async function saveDownloadCopy({ buffer, filename, profile }) {
+  if (serverCvCopyDisabled()) {
+    return { ok: false, path: '', dir: '', skipped: true };
+  }
+
   const configured =
     profile?.cvSaveFolder != null && String(profile.cvSaveFolder).trim() !== '';
 

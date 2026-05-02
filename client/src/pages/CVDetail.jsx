@@ -13,6 +13,15 @@ import {
 import { profileRefToIdString } from '../utils/profileRef.js';
 import CVPreview from '../components/CVPreview.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { mimeForDownloadFilename, saveBlobAsFile } from '../utils/saveBlobAsFile.js';
+
+function readPreferSavePicker() {
+  try {
+    return localStorage.getItem('cvPreferSavePicker') !== 'false';
+  } catch {
+    return true;
+  }
+}
 
 const STATUS_CONFIG = {
   saved:     { label: 'Created',   bg: 'bg-gray-100',    text: 'text-gray-600',    dot: 'bg-gray-400',    border: 'border-gray-300' },
@@ -43,21 +52,19 @@ function decodeCvCopyPathHeader(copyB64) {
   }
 }
 
-/** @returns {Promise<string>} resolved server filesystem path if API sent X-CV-Server-Copy-Path */
-async function downloadFile(url, filename) {
+/** @returns {Promise<{ serverCopyPath?: string; cancelled?: boolean }>} */
+async function downloadCvArtifact(url, filename, usePickerFirst) {
   const token = localStorage.getItem('token');
   const res = await axios.get(url, {
     headers: { Authorization: `Bearer ${token}` },
     responseType: 'blob',
   });
   const serverCopyPath = decodeCvCopyPathHeader(res.headers['x-cv-server-copy-path']);
-  const href = URL.createObjectURL(res.data);
-  const a = document.createElement('a');
-  a.href = href;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(href);
-  return serverCopyPath;
+  const mime = mimeForDownloadFilename(filename);
+  const r = await saveBlobAsFile(res.data, filename, { mime, usePickerFirst });
+  if (r.via === 'aborted')
+    return { serverCopyPath, cancelled: true };
+  return { serverCopyPath };
 }
 
 async function copyToClipboard(text) {
@@ -90,6 +97,10 @@ function InfoCard({ label, value, highlight }) {
   );
 }
 
+function pickerSaveSupported() {
+  return typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function';
+}
+
 export default function CVDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -108,6 +119,17 @@ export default function CVDetail() {
   const [aiError, setAiError] = useState('');
   const [activeTab, setActiveTab] = useState('ai');
   const [lastServerCopyPath, setLastServerCopyPath] = useState('');
+  const [preferSavePicker, setPreferSavePicker] = useState(() =>
+    pickerSaveSupported() ? readPreferSavePicker() : false
+  );
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('cvPreferSavePicker', preferSavePicker ? 'true' : 'false');
+    } catch {
+      /* ignore */
+    }
+  }, [preferSavePicker]);
 
   useEffect(() => {
     getCV(id)
@@ -125,14 +147,24 @@ export default function CVDetail() {
     try {
       if (type === 'cover-letter-pdf') {
         const filename = `CoverLetter_${cv.company_name}_${cv.role_title}.pdf`.replace(/[^a-z0-9_.]/gi, '_');
-        const p = await downloadFile(downloadCoverLetterPdfUrl(id), filename);
-        if (p) setLastServerCopyPath(p);
+        const { serverCopyPath, cancelled } = await downloadCvArtifact(
+          downloadCoverLetterPdfUrl(id),
+          filename,
+          preferSavePicker
+        );
+        if (cancelled) return;
+        if (serverCopyPath) setLastServerCopyPath(serverCopyPath);
         return;
       }
       const ext = type === 'docx' ? 'docx' : 'pdf';
       const filename = `CV_${cv.company_name}_${cv.role_title}.${ext}`.replace(/[^a-z0-9_.]/gi, '_');
-      const p = await downloadFile(apiPublicUrl(`/cv/${id}/download/${type}`), filename);
-      if (p) setLastServerCopyPath(p);
+      const { serverCopyPath, cancelled } = await downloadCvArtifact(
+        apiPublicUrl(`/cv/${id}/download/${type}`),
+        filename,
+        preferSavePicker
+      );
+      if (cancelled) return;
+      if (serverCopyPath) setLastServerCopyPath(serverCopyPath);
     } catch (err) {
       alert(err.response?.data?.error || err.message);
     } finally {
@@ -213,6 +245,24 @@ export default function CVDetail() {
         <div className="flex flex-wrap gap-2">
           {!isAdmin && (
             <>
+              <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer shrink-0 order-last sm:order-none w-full sm:w-auto mr-2">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300 text-accent focus:ring-accent shrink-0"
+                  checked={preferSavePicker}
+                  onChange={(e) => setPreferSavePicker(e.target.checked)}
+                  disabled={!pickerSaveSupported()}
+                />
+                <span title="Opens your system Save dialog so you choose folder & filename (Chrome/Edge over HTTPS).">
+                  Pick save location (Save&nbsp;As)
+                </span>
+              </label>
+              {!pickerSaveSupported() && (
+                <span className="text-[11px] text-gray-500 max-w-md leading-snug">
+                  This browser does not support choosing a folder from the page. Use Chrome or Edge, or enable
+                  &quot;Ask where to save each file&quot; in your browser&apos;s download settings.
+                </span>
+              )}
               <button
                 onClick={() => handleDownload('docx')}
                 disabled={!!downloading}
