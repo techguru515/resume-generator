@@ -1,6 +1,20 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: `${import.meta.env.VITE_API_URL}/api`});
+const API_ORIGIN = String(import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
+/**
+ * Full URL for backend routes under `/api/...` (fetch, window.open, PDF downloads).
+ * In local dev with no `VITE_API_URL`, uses same-origin `/api` so Vite can proxy to the server.
+ */
+export function apiPublicUrl(pathAfterApi) {
+  const p = pathAfterApi.startsWith('/') ? pathAfterApi : `/${pathAfterApi}`;
+  if (API_ORIGIN) return `${API_ORIGIN}/api${p}`;
+  return `/api${p}`;
+}
+
+const api = axios.create({
+  baseURL: API_ORIGIN ? `${API_ORIGIN}/api` : '/api',
+});
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
@@ -23,9 +37,9 @@ export const updateCV = (id, data) => api.put(`/cv/${id}`, data).then((r) => r.d
 export const deleteCV = (id) => api.delete(`/cv/${id}`).then((r) => r.data);
 export const updateCVStatus = (id, status) =>
   api.post(`/cv/${encodeURIComponent(String(id))}/status`, { application_status: status }).then((r) => r.data);
-export const downloadDocxUrl = (id) => `/api/cv/${id}/download/docx`;
-export const downloadPdfUrl = (id) => `/api/cv/${id}/download/pdf`;
-export const downloadCoverLetterPdfUrl = (id) => `/api/cv/${id}/download/cover-letter/pdf`;
+export const downloadDocxUrl = (id) => apiPublicUrl(`/cv/${id}/download/docx`);
+export const downloadPdfUrl = (id) => apiPublicUrl(`/cv/${id}/download/pdf`);
+export const downloadCoverLetterPdfUrl = (id) => apiPublicUrl(`/cv/${id}/download/cover-letter/pdf`);
 
 // AI assistant
 export const cvChat = ({ cvId, message, history }) =>

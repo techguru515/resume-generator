@@ -1,7 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { getCV, deleteCV, getProfileById, updateCVStatus, cvChat, downloadCoverLetterPdfUrl } from '../api.js';
+import {
+  getCV,
+  deleteCV,
+  getProfileById,
+  updateCVStatus,
+  cvChat,
+  downloadCoverLetterPdfUrl,
+  apiPublicUrl,
+} from '../api.js';
 import { profileRefToIdString } from '../utils/profileRef.js';
 import CVPreview from '../components/CVPreview.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -106,7 +114,7 @@ export default function CVDetail() {
       }
       const ext = type === 'docx' ? 'docx' : 'pdf';
       const filename = `CV_${cv.company_name}_${cv.role_title}.${ext}`.replace(/[^a-z0-9_.]/gi, '_');
-      await downloadFile(`/api/cv/${id}/download/${type}`, filename);
+      await downloadFile(apiPublicUrl(`/cv/${id}/download/${type}`), filename);
     } catch (err) {
       alert(err.response?.data?.error || err.message);
     } finally {

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { apiPublicUrl } from '../api.js';
 
 const AuthContext = createContext(null);
 
@@ -11,7 +12,7 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem('token');
     if (!token) { setLoading(false); return; }
     axios
-      .get('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+      .get(apiPublicUrl('/auth/me'), { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => setUser(r.data))
       .catch(() => localStorage.removeItem('token'))
       .finally(() => setLoading(false));

@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { listProfiles, createProfile, updateProfile, deleteProfile, listTemplates, listCVs } from '../api.js';
+import {
+  listProfiles,
+  createProfile,
+  updateProfile,
+  deleteProfile,
+  listTemplates,
+  listCVs,
+  apiPublicUrl,
+} from '../api.js';
 import { profileRefToIdString } from '../utils/profileRef.js';
 
 const EMPTY_WORK = { company: '', role: '', startDate: '', endDate: '', current: false };
@@ -196,7 +204,7 @@ export default function ProfilePage() {
     setError('');
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get(`/api/template/${encodeURIComponent(templateId)}/preview`, {
+      const res = await axios.get(apiPublicUrl(`/template/${encodeURIComponent(templateId)}/preview`), {
         params: { cvId },
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         responseType: 'text',

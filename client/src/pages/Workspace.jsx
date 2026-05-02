@@ -1,6 +1,17 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { listProfiles, listCVs, deleteCV, listWorkspaceLinks, saveWorkspaceLinks, deleteWorkspaceLinks, generateCvsForWorkspaceLinks, setProfileForWorkspaceLinks, setJobDescriptionForWorkspaceLink } from '../api.js';
+import {
+  listProfiles,
+  listCVs,
+  deleteCV,
+  listWorkspaceLinks,
+  saveWorkspaceLinks,
+  deleteWorkspaceLinks,
+  generateCvsForWorkspaceLinks,
+  setProfileForWorkspaceLinks,
+  setJobDescriptionForWorkspaceLink,
+  apiPublicUrl,
+} from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { profileRefToIdString, profileRefToLabel } from '../utils/profileRef.js';
@@ -421,7 +432,7 @@ export default function Workspace() {
     setDownloadingExtension(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/extension/cv-builder-zip', {
+      const res = await fetch(apiPublicUrl('/extension/cv-builder-zip'), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) {
