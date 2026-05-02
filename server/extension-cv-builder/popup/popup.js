@@ -16,7 +16,6 @@ const emailEl = $('email');
 const passwordEl = $('password');
 const loginBtn = $('loginBtn');
 const loginErr = $('loginErr');
-const webAppOriginEl = $('webAppOrigin');
 
 const logoutBtn = $('logoutBtn');
 const tabUrlEl = $('tabUrl');
@@ -24,7 +23,6 @@ const statusEl = $('status');
 const msgEl = $('msg');
 
 const saveLinkBtn = $('saveLinkBtn');
-const openInAppBtn = $('openInAppBtn');
 
 const profileSelect = $('profileSelect');
 const setProfileBtn = $('setProfileBtn');
@@ -53,7 +51,6 @@ const aiAskBtn = $('aiAskBtn');
 
 let state = {
   apiBase: '',
-  webAppOrigin: '',
   token: '',
   user: null,
   tabUrl: '',
@@ -117,19 +114,6 @@ function normalizeApiBaseUrl(input) {
   } catch {
     if (!/\/api$/i.test(s)) return `${s}/api`;
     return s;
-  }
-}
-
-/** SPA origin only (scheme + host, optional port); no trailing slash. */
-function normalizeWebAppOrigin(input) {
-  const raw = String(input ?? '').trim().replace(/\/+$/, '');
-  const fb = String(FALLBACK.webAppOrigin || '').trim().replace(/\/+$/, '') || 'http://127.0.0.1:3000';
-  if (!raw) return fb;
-  try {
-    const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-    return new URL(withProto).origin;
-  } catch {
-    return fb;
   }
 }
 
@@ -213,19 +197,16 @@ function installActiveTabListeners() {
 }
 
 async function loadSession() {
-  const stored = await chrome.storage.local.get(['apiBase', 'token', 'user', 'webAppOrigin']);
+  const stored = await chrome.storage.local.get(['apiBase', 'token', 'user']);
   state.apiBase = normalizeApiBaseUrl(stored.apiBase || FALLBACK.apiBase);
-  state.webAppOrigin = normalizeWebAppOrigin(stored.webAppOrigin || FALLBACK.webAppOrigin);
   state.token = stored.token || '';
   state.user = stored.user || null;
   apiBaseEl.value = state.apiBase;
-  if (webAppOriginEl) webAppOriginEl.value = state.webAppOrigin;
 }
 
 async function saveSession() {
   await chrome.storage.local.set({
     apiBase: state.apiBase,
-    webAppOrigin: state.webAppOrigin || normalizeWebAppOrigin(FALLBACK.webAppOrigin),
     token: state.token,
     user: state.user,
   });
@@ -725,20 +706,12 @@ function blobToBase64(blob) {
   });
 }
 
-async function openInApp() {
-  const origin = normalizeWebAppOrigin(state.webAppOrigin);
-  const url = state.link?.cvId ? `${origin}/cv/${state.link.cvId}` : `${origin}/workspace`;
-  await chrome.tabs.create({ url });
-}
-
 loginBtn.addEventListener('click', async () => {
   loginErr.textContent = '';
   loginBtn.disabled = true;
   try {
     state.apiBase = normalizeApiBaseUrl(apiBaseEl.value);
-    state.webAppOrigin = normalizeWebAppOrigin(webAppOriginEl?.value || FALLBACK.webAppOrigin);
     apiBaseEl.value = state.apiBase;
-    if (webAppOriginEl) webAppOriginEl.value = state.webAppOrigin;
     const res = await fetch(`${state.apiBase}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -763,7 +736,6 @@ logoutBtn.addEventListener('click', async () => {
 });
 
 saveLinkBtn.addEventListener('click', () => run(saveLink));
-openInAppBtn.addEventListener('click', () => run(openInApp));
 setProfileBtn.addEventListener('click', () => run(setProfile));
 saveJdBtn.addEventListener('click', () => run(saveJd));
 generateBtn.addEventListener('click', () => run(generateCv));

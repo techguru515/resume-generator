@@ -26,9 +26,6 @@
         <label class="lbl">API base URL</label>
         <input id="apiBase" class="in" placeholder="https://your-api.up.railway.app/api" />
         <div class="muted small">Hosted backend: paste your Railway/API origin; <code>/api</code> is added if missing.</div>
-        <label class="lbl">Web app URL</label>
-        <input id="webAppOrigin" class="in" placeholder="https://your-app.vercel.app" />
-        <div class="muted small">SPA (Vercel etc.) — used by “Open in app”. No trailing slash.</div>
         <label class="lbl">Email</label>
         <input id="email" class="in" type="email" placeholder="you@example.com" />
         <label class="lbl">Password</label>
@@ -49,11 +46,6 @@
 
         <div id="status" class="statusBox">Checking…</div>
 
-        <div class="row gap">
-          <button id="saveLinkBtn" class="btn">Save link</button>
-          <button id="openInAppBtn" class="btn">Open in app</button>
-        </div>
-
         <hr class="sep" />
 
         <div class="tabs" role="tablist" aria-label="CV Builder tabs">
@@ -63,6 +55,9 @@
         </div>
 
         <div id="panelGenerate" class="tabPanel">
+          <button id="saveLinkBtn" class="btn" type="button">Save link</button>
+          <div class="muted small">Stores this tab&apos;s URL in Workspace.</div>
+
           <label class="lbl">Profile</label>
           <select id="profileSelect" class="in"></select>
           <button id="setProfileBtn" class="btn">Set profile</button>
