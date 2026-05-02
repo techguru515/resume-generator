@@ -3,6 +3,9 @@
  * that only run from the server/ directory.
  *
  * Copies from repo root ../extension-cv-builder (when present). Safe no-op if missing.
+ *
+ * Keep server/extension-cv-builder/ OFF .gitignore: some hosts omit ignored paths from the deploy
+ * artifact. Prefer committing only repo-root extension-cv-builder; avoid `git add` of this bundle.
  */
 const fs = require('fs');
 const path = require('path');

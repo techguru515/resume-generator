@@ -47,5 +47,5 @@ data/
 #generated files
 cv/
 
-# Postinstall copies repo extension-cv-builder here for hosted server-only deploys (Option B)
-server/extension-cv-builder/
+# Note: Do not gitignore server/extension-cv-builder/. Railway deploy can omit gitignored paths
+# from the final artifact—then postinstall bundle is missing and extension ZIP returns 503.

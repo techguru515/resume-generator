@@ -1,0 +1,108 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CV Builder</title>
+    <link rel="stylesheet" href="popup.css" />
+    <script src="../defaults.js"></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hdr">
+        <div class="brand">
+          <div class="dot"></div>
+          <div>
+            <div class="title">CV Builder</div>
+            <div class="sub">Link → JD → CV</div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Login -->
+      <section id="login" class="card hidden">
+        <div class="cardTitle">Sign in</div>
+        <div class="muted">Use your CV Builder account.</div>
+        <label class="lbl">API base URL</label>
+        <input id="apiBase" class="in" placeholder="https://your-api.up.railway.app/api" />
+        <div class="muted small">Hosted backend: paste your Railway/API origin; <code>/api</code> is added if missing.</div>
+        <label class="lbl">Web app URL</label>
+        <input id="webAppOrigin" class="in" placeholder="https://your-app.vercel.app" />
+        <div class="muted small">SPA (Vercel etc.) — used by “Open in app”. No trailing slash.</div>
+        <label class="lbl">Email</label>
+        <input id="email" class="in" type="email" placeholder="you@example.com" />
+        <label class="lbl">Password</label>
+        <input id="password" class="in" type="password" placeholder="••••••••" />
+        <button id="loginBtn" class="btn primary">Sign in</button>
+        <div id="loginErr" class="err"></div>
+      </section>
+
+      <!-- Main -->
+      <section id="main" class="card hidden">
+        <div class="row between">
+          <div>
+            <div class="cardTitle">Current tab</div>
+            <div id="tabUrl" class="mono small"></div>
+          </div>
+          <button id="logoutBtn" class="btn">Log out</button>
+        </div>
+
+        <div id="status" class="statusBox">Checking…</div>
+
+        <div class="row gap">
+          <button id="saveLinkBtn" class="btn">Save link</button>
+          <button id="openInAppBtn" class="btn">Open in app</button>
+        </div>
+
+        <hr class="sep" />
+
+        <div class="tabs" role="tablist" aria-label="CV Builder tabs">
+          <button id="tabGenerate" class="tabBtn active" type="button" role="tab" aria-selected="true">Generate</button>
+          <button id="tabDownload" class="tabBtn" type="button" role="tab" aria-selected="false">Download</button>
+          <button id="tabAi" class="tabBtn" type="button" role="tab" aria-selected="false">AI</button>
+        </div>
+
+        <div id="panelGenerate" class="tabPanel">
+          <label class="lbl">Profile</label>
+          <select id="profileSelect" class="in"></select>
+          <button id="setProfileBtn" class="btn">Set profile</button>
+
+          <label class="lbl">Job description (JD)</label>
+          <textarea id="jdText" class="ta" rows="6" placeholder="Paste JD here…"></textarea>
+          <button id="saveJdBtn" class="btn">Save JD</button>
+
+          <hr class="sep" />
+
+          <button id="generateBtn" class="btn primary">Generate CV</button>
+        </div>
+
+        <div id="panelDownload" class="tabPanel hidden">
+          <div class="row gap">
+            <button id="downloadPdfBtn" class="btn" disabled>Download PDF</button>
+            <button id="downloadDocxBtn" class="btn" disabled>Download DOCX</button>
+            <button id="downloadCoverLetterBtn" class="btn" disabled>Download Cover Letter</button>
+            <button id="copyCoverLetterBtn" class="btn" disabled>Copy Cover Letter</button>
+          </div>
+
+          <div class="row gap">
+            <button id="autoUploadBtn" class="btn" disabled>Auto-upload PDF</button>
+            <button id="autoUploadCoverBtn" class="btn" disabled>Auto-upload Cover Letter</button>
+          </div>
+        </div>
+
+        <div id="panelAi" class="tabPanel hidden">
+          <div class="cardTitle">AI assistant</div>
+          <div class="muted">Uses saved JD + generated CV.</div>
+          <div id="aiChatBox" class="chatBox"></div>
+          <textarea id="aiQuestion" class="ta" rows="3" placeholder="Ask: improve summary, missing keywords, rewrite bullets…"></textarea>
+          <button id="aiAskBtn" class="btn" disabled>Ask AI</button>
+        </div>
+
+        <div id="msg" class="msg"></div>
+      </section>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
+

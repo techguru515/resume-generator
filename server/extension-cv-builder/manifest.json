@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "CV Builder — Job Link Helper",
+  "version": "0.1.0",
+  "description": "Detect saved job links, manage JD/profile, generate CVs, and download PDFs/DOCX. Defaults target hosted API + web app (see defaults.js).",
+  "permissions": ["activeTab", "storage", "tabs", "notifications", "sidePanel", "scripting", "downloads"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*", "https://*/*", "http://*/*"],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "action": {
+    "default_title": "CV Builder",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "popup/popup.html"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
+
