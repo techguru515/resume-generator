@@ -34,6 +34,8 @@ body {
 }
 .cardTitle { font-weight: 700; margin-bottom: 4px; }
 .muted { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.muted.small { font-size: 11px; line-height: 1.35; margin-bottom: 6px; }
+.muted code { font-size: 10px; background: rgba(148, 163, 184, 0.2); padding: 1px 4px; border-radius: 4px; }
 
 .lbl { display: block; font-size: 12px; font-weight: 700; color: #334155; margin: 10px 0 4px; }
 .in, .ta {

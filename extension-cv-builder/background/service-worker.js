@@ -1,4 +1,10 @@
 // Minimal background worker: keep badge updated on tab changes.
+importScripts('../defaults.js');
+
+const FALLBACK = globalThis.CVB_DEFAULTS || {
+  apiBase: 'http://127.0.0.1:5000/api',
+  webAppOrigin: 'http://127.0.0.1:3000',
+};
 
 chrome.runtime.onInstalled.addListener(() => {
   try {
@@ -7,12 +13,24 @@ chrome.runtime.onInstalled.addListener(() => {
   } catch {
     // ignore (older Chrome versions)
   }
+
+  try {
+    const s = await chrome.storage.local.get(['apiBase']);
+    if (!s.apiBase) {
+      await chrome.storage.local.set({
+        apiBase: FALLBACK.apiBase,
+        webAppOrigin: FALLBACK.webAppOrigin,
+      });
+    }
+  } catch {
+    // ignore
+  }
 });
 
 async function getSession() {
   const { apiBase, token } = await chrome.storage.local.get(['apiBase', 'token']);
   return {
-    apiBase: apiBase || 'http://127.0.0.1:5000/api',
+    apiBase: apiBase || FALLBACK.apiBase,
     token: token || '',
   };
 }

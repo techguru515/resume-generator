@@ -1,5 +1,11 @@
 const $ = (id) => document.getElementById(id);
 
+const FALLBACK =
+  globalThis.CVB_DEFAULTS || {
+    apiBase: 'http://127.0.0.1:5000/api',
+    webAppOrigin: 'http://127.0.0.1:3000',
+  };
+
 const loginEl = $('login');
 const mainEl = $('main');
 
@@ -8,6 +14,7 @@ const emailEl = $('email');
 const passwordEl = $('password');
 const loginBtn = $('loginBtn');
 const loginErr = $('loginErr');
+const webAppOriginEl = $('webAppOrigin');
 
 const logoutBtn = $('logoutBtn');
 const tabUrlEl = $('tabUrl');
@@ -44,6 +51,7 @@ const aiAskBtn = $('aiAskBtn');
 
 let state = {
   apiBase: '',
+  webAppOrigin: '',
   token: '',
   user: null,
   tabUrl: '',
@@ -97,9 +105,29 @@ function renderAiChat() {
   aiChatBox.scrollTop = aiChatBox.scrollHeight;
 }
 
-function baseHostFromApiBase(apiBase) {
-  // http://127.0.0.1:5000/api -> http://127.0.0.1:5000
-  return String(apiBase || '').replace(/\/api\/?$/i, '');
+/** API base for this project is always `{origin}/api`. User can paste Railway host or full .../api URL. */
+function normalizeApiBaseUrl(input) {
+  let s = String(input ?? '').trim().replace(/\/+$/, '');
+  if (!s) return FALLBACK.apiBase.replace(/\/+$/, '');
+  try {
+    const withProto = /^https?:\/\//i.test(s) ? s : `https://${s}`;
+    return `${new URL(withProto).origin}/api`;
+  } catch {
+    if (!/\/api$/i.test(s)) return `${s}/api`;
+    return s;
+  }
+}
+
+/** SPA origin only (scheme + host, optional port); no trailing slash. */
+function normalizeWebAppOrigin(input) {
+  const raw = String(input ?? '').trim().replace(/\/+$/, '');
+  if (!raw) return String(FALLBACK.webAppOrigin || '').trim().replace(/\/+$/, '') || 'http://127.0.0.1:3000';
+  try {
+    const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    return new URL(withProto).origin;
+  } catch {
+    return String(FALLBACK.webAppOrigin || '').trim().replace(/\/+$/, '') || 'http://127.0.0.1:3000';
+  }
 }
 
 async function apiFetch(path, opts = {}) {
@@ -182,15 +210,22 @@ function installActiveTabListeners() {
 }
 
 async function loadSession() {
-  const stored = await chrome.storage.local.get(['apiBase', 'token', 'user']);
-  state.apiBase = stored.apiBase || 'http://127.0.0.1:5000/api';
+  const stored = await chrome.storage.local.get(['apiBase', 'token', 'user', 'webAppOrigin']);
+  state.apiBase = normalizeApiBaseUrl(stored.apiBase || FALLBACK.apiBase);
+  state.webAppOrigin = normalizeWebAppOrigin(stored.webAppOrigin || FALLBACK.webAppOrigin);
   state.token = stored.token || '';
   state.user = stored.user || null;
   apiBaseEl.value = state.apiBase;
+  if (webAppOriginEl) webAppOriginEl.value = state.webAppOrigin;
 }
 
 async function saveSession() {
-  await chrome.storage.local.set({ apiBase: state.apiBase, token: state.token, user: state.user });
+  await chrome.storage.local.set({
+    apiBase: state.apiBase,
+    webAppOrigin: state.webAppOrigin || normalizeWebAppOrigin(FALLBACK.webAppOrigin),
+    token: state.token,
+    user: state.user,
+  });
 }
 
 async function clearSession() {
@@ -688,8 +723,8 @@ function blobToBase64(blob) {
 }
 
 async function openInApp() {
-  const base = baseHostFromApiBase(state.apiBase);
-  const url = state.link?.cvId ? `${base}/cv/${state.link.cvId}` : `${base}/workspace`;
+  const origin = normalizeWebAppOrigin(state.webAppOrigin);
+  const url = state.link?.cvId ? `${origin}/cv/${state.link.cvId}` : `${origin}/workspace`;
   await chrome.tabs.create({ url });
 }
 
@@ -697,7 +732,10 @@ loginBtn.addEventListener('click', async () => {
   loginErr.textContent = '';
   loginBtn.disabled = true;
   try {
-    state.apiBase = String(apiBaseEl.value || '').trim().replace(/\/+$/, '');
+    state.apiBase = normalizeApiBaseUrl(apiBaseEl.value);
+    state.webAppOrigin = normalizeWebAppOrigin(webAppOriginEl?.value || FALLBACK.webAppOrigin);
+    apiBaseEl.value = state.apiBase;
+    if (webAppOriginEl) webAppOriginEl.value = state.webAppOrigin;
     const res = await fetch(`${state.apiBase}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

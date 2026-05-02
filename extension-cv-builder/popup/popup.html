@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CV Builder</title>
     <link rel="stylesheet" href="popup.css" />
+    <script src="../defaults.js"></script>
   </head>
   <body>
     <div class="wrap">
@@ -23,7 +24,11 @@
         <div class="cardTitle">Sign in</div>
         <div class="muted">Use your CV Builder account.</div>
         <label class="lbl">API base URL</label>
-        <input id="apiBase" class="in" placeholder="http://127.0.0.1:5000/api" />
+        <input id="apiBase" class="in" placeholder="https://your-api.up.railway.app/api" />
+        <div class="muted small">Hosted backend: paste your Railway/API origin; <code>/api</code> is added if missing.</div>
+        <label class="lbl">Web app URL</label>
+        <input id="webAppOrigin" class="in" placeholder="https://your-app.vercel.app" />
+        <div class="muted small">SPA (Vercel etc.) — used by “Open in app”. No trailing slash.</div>
         <label class="lbl">Email</label>
         <input id="email" class="in" type="email" placeholder="you@example.com" />
         <label class="lbl">Password</label>

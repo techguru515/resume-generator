@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "CV Builder — Job Link Helper",
   "version": "0.1.0",
-  "description": "Detect saved job links, manage JD/profile, generate CVs, and download PDFs/DOCX from CV Builder.",
+  "description": "Detect saved job links, manage JD/profile, generate CVs, and download PDFs/DOCX. Defaults target hosted API + web app (see defaults.js).",
   "permissions": ["activeTab", "storage", "tabs", "notifications", "sidePanel", "scripting", "downloads"],
   "host_permissions": ["http://127.0.0.1/*", "http://localhost/*", "https://*/*", "http://*/*"],
   "background": {
