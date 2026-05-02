@@ -432,7 +432,9 @@ export default function Workspace() {
     setDownloadingExtension(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(apiPublicUrl('/extension/cv-builder-zip'), {
+      const url = apiPublicUrl('/extension/cv-builder-zip');
+      const res = await fetch(url, {
+        method: 'GET',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) {
@@ -446,15 +448,32 @@ export default function Workspace() {
         }
         throw new Error(msg);
       }
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      const looksZip =
+        ct.includes('zip') || ct.includes('octet-stream') || ct.includes('x-zip');
+      if (!looksZip) {
+        const text = await res.text().catch(() => '');
+        let msg = 'Server did not return a ZIP file.';
+        try {
+          const j = text ? JSON.parse(text) : null;
+          if (j?.error) msg = j.error;
+          else if (text) msg = text.slice(0, 300);
+        } catch {
+          if (text) msg = text.slice(0, 300);
+        }
+        throw new Error(msg);
+      }
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const objUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
+      a.href = objUrl;
       a.download = 'extension-cv-builder.zip';
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(objUrl);
+    } catch (err) {
+      alert(err?.message || 'Could not download extension. If you use a hosted API, the server must include the extension files or EXTENSION_ZIP_PATH.');
     } finally {
       setDownloadingExtension(false);
     }

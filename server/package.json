@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "copy-extension": "node scripts/copy-extension-for-deploy.js",
+    "postinstall": "node scripts/copy-extension-for-deploy.js"
   },
   "dependencies": {
     "archiver": "^7.0.1",

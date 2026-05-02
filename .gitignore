@@ -46,3 +46,6 @@ data/
 
 #generated files
 cv/
+
+# Postinstall copies repo extension-cv-builder here for hosted server-only deploys (Option B)
+server/extension-cv-builder/
