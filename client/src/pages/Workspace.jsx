@@ -1650,7 +1650,7 @@ ${items}
           ) : cvList.length === 0 ? (
             <div className="py-12 text-center text-gray-400 text-sm">
               <p>No CVs yet.</p>
-              <Link to="/create" className="text-accent hover:underline mt-2 inline-block">Create your first CV →</Link>
+              <span className="text-xs text-gray-500 mt-2 block">Paste job URLs above, add a JD, then generate CVs.</span>
             </div>
           ) : sortedFilteredCvs.length === 0 ? (
             <div className="space-y-2">

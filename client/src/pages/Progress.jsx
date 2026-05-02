@@ -237,7 +237,7 @@ export default function Progress() {
       {total === 0 ? (
         <div className="bg-white rounded-2xl shadow p-10 text-center text-gray-400">
           <p className="text-sm mb-2">No CVs yet.</p>
-          <a href="/create" className="text-accent hover:underline text-sm">Create your first CV →</a>
+          <a href="/workspace" className="text-accent hover:underline text-sm">Open Workspace →</a>
         </div>
       ) : (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

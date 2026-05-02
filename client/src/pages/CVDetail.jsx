@@ -313,14 +313,6 @@ export default function CVDetail() {
           )}
         </div>
       </div>
-
-      {lastServerCopyPath ? (
-        <p className="text-[11px] text-gray-500 -mt-4 max-w-5xl mx-auto">
-          Server-side copy (where the API runs):{' '}
-          <code className="rounded bg-gray-100 px-1 py-0.5 text-[10px] break-all">{lastServerCopyPath}</code>
-        </p>
-      ) : null}
-
       {/* Job Info Dashboard Card */}
       <div className={`rounded-2xl shadow border ${cfg.border} ${cfg.bg} p-6 space-y-5`}>
         {/* Title row */}

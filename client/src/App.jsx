@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import Dashboard from './pages/Dashboard.jsx';
-import CreateCV from './pages/CreateCV.jsx';
 import Workspace from './pages/Workspace.jsx';
 import Progress from './pages/Progress.jsx';
 import CVDetail from './pages/CVDetail.jsx';
@@ -159,7 +158,7 @@ function Layout() {
         <Routes>
           {/* Client routes */}
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/create" element={<ProtectedRoute><CreateCV /></ProtectedRoute>} />
+          <Route path="/create" element={<ProtectedRoute><Navigate to="/workspace" replace /></ProtectedRoute>} />
           <Route path="/workspace" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
           <Route path="/progress" element={<ProtectedRoute><Progress /></ProtectedRoute>} />
 

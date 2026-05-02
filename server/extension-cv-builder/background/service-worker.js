@@ -6,7 +6,7 @@ const FALLBACK = globalThis.CVB_DEFAULTS || {
   webAppOrigin: 'https://resume-generator-live.vercel.app',
 };
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
   try {
     // Open the side panel when the extension icon is clicked.
     chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });

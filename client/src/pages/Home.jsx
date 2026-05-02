@@ -220,7 +220,7 @@ export default function Home() {
         <h2 className="text-xl font-bold text-primary">My Dashboard</h2>
         <button
           type="button"
-          onClick={() => navigate('/create')}
+          onClick={() => navigate('/workspace')}
           className="bg-accent text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 transition font-medium"
         >
           + New CV
