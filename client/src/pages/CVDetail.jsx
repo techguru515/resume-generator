@@ -134,7 +134,7 @@ export default function CVDetail() {
   const [aiInput, setAiInput] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
-  const [activeTab, setActiveTab] = useState('ai');
+  const [activeTab, setActiveTab] = useState('preview');
   const [lastServerCopyPath, setLastServerCopyPath] = useState('');
   const [preferSavePicker, setPreferSavePicker] = useState(() =>
     pickerSaveSupported() ? readPreferSavePicker() : false
@@ -147,6 +147,10 @@ export default function CVDetail() {
       /* ignore */
     }
   }, [preferSavePicker]);
+
+  useEffect(() => {
+    setActiveTab('preview');
+  }, [id]);
 
   useEffect(() => {
     getCV(id)
@@ -243,10 +247,10 @@ export default function CVDetail() {
   const hasCoverLetter = Boolean(String(cv.cover_letter || '').trim());
 
   const tabs = [
-    { key: 'ai', label: 'AI Assistant', show: true },
     { key: 'preview', label: 'CV Preview', show: true },
     { key: 'jd', label: 'Job Description', show: hasJd },
     { key: 'cover', label: 'Cover Letter', show: hasCoverLetter },
+    { key: 'ai', label: 'AI Assistant', show: true },
   ].filter((t) => t.show);
 
   return (
