@@ -64,6 +64,15 @@ function rawProfileIdRef(ref) {
   return ref;
 }
 
+/** DOCX uses layout themes; DB templates are Handlebars for PDF — map by template name. */
+function resolveDocxLayoutFormat(profile, tplPlain) {
+  if (tplPlain?.kind === 'built_in' && tplPlain.builtInKey) return tplPlain.builtInKey;
+  const n = String(tplPlain?.name || '');
+  if (n === 'Classic') return 'classic';
+  if (n.includes('Executive')) return 'executive';
+  return profile.cvFormat || 'classic';
+}
+
 async function getProfileById(profileId) {
   const id = rawProfileIdRef(profileId);
   const profile = await Profile.findById(id);
@@ -196,7 +205,7 @@ exports.downloadDocx = async (req, res) => {
     const profile = await Profile.findById(rawProfileIdRef(cv.profileId)).populate('templateId');
     if (!profile) return res.status(404).json({ error: 'Profile not found for this CV' });
     const tpl = profile.templateId && typeof profile.templateId === 'object' ? profile.templateId.toObject() : null;
-    const format = tpl && tpl.kind === 'built_in' && tpl.builtInKey ? tpl.builtInKey : profile.cvFormat;
+    const format = resolveDocxLayoutFormat(profile.toObject(), tpl);
 
     const buffer = await generateDocx(cv.toObject(), profile.toObject(), { format });
     const filename = `${safeBaseName(profile.name)}.docx`;

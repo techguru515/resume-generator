@@ -1,7 +1,7 @@
 const Handlebars = require('handlebars');
+const { buildMetadata } = require('./resumeMetadata');
 
 function htmlEscapeWithBold(value) {
-  // Convert **bold** to <strong> while escaping everything else.
   const s = String(value ?? '');
   const parts = s.split('**');
   let out = '';
@@ -19,7 +19,6 @@ function normalizeUrl(raw) {
 }
 
 function formatDate(raw) {
-  // Keep as-is (e.g. "Jan 2020", "2021", "Present")
   return String(raw ?? '').trim();
 }
 
@@ -34,6 +33,7 @@ function registerHelpersOnce() {
 function buildResumeViewModel(cvData, profile) {
   const p = profile || {};
   const cv = cvData || {};
+  const experiences = cv.experiences || {};
 
   const skillsMap = cv.skills instanceof Map ? cv.skills : new Map(Object.entries(cv.skills || {}));
   const skillsHighlighted = Array.from(
@@ -44,6 +44,16 @@ function buildResumeViewModel(cvData, profile) {
         .filter(Boolean)
     )
   ).slice(0, 28);
+
+  const skills_categories = Array.from(skillsMap.entries()).map(([cat, items]) => ({
+    label: String(cat)
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase()),
+    items_line: (Array.isArray(items) ? items : [])
+      .map((x) => String(x).trim())
+      .filter(Boolean)
+      .join(', '),
+  }));
 
   const work = Array.isArray(p.workExperiences) ? p.workExperiences : [];
   const exps =
@@ -67,6 +77,23 @@ function buildResumeViewModel(cvData, profile) {
           }))
           .filter((e) => e.title);
 
+  const classic_experiences =
+    work.length > 0
+      ? work.map((w, i) => ({
+          role: w.role,
+          company: w.company,
+          date: w.current ? `${w.startDate} – Present` : [w.startDate, w.endDate].filter(Boolean).join(' – '),
+          bullets: experiences[`experience${i + 1}`] || [],
+        }))
+      : [1, 2, 3]
+          .map((i) => ({
+            role: experiences[`role${i}`],
+            company: experiences[`company${i}`],
+            date: experiences[`date${i}`],
+            bullets: experiences[`experience${i}`] || [],
+          }))
+          .filter((r) => r.role);
+
   const educations = (Array.isArray(p.education) ? p.education : []).map((e) => ({
     institution: e.institution,
     degree: e.degree,
@@ -75,11 +102,29 @@ function buildResumeViewModel(cvData, profile) {
     end_date: e.endYear || '',
   }));
 
+  const educations_classic = (Array.isArray(p.education) ? p.education : []).map((edu) => ({
+    institution: edu.institution,
+    degree_line: [edu.degree, edu.field].filter(Boolean).join(', '),
+    years: [edu.startYear, edu.endYear].filter(Boolean).join(' – '),
+  }));
+
   const certifications = (Array.isArray(p.certifications) ? p.certifications : []).map((c) => ({
     name: c.name,
     issuer: c.issuer || '',
     year: c.year || '',
   }));
+
+  const certifications_classic = (Array.isArray(p.certifications) ? p.certifications : []).map((c) => ({
+    name: c.name,
+    meta: [c.issuer, c.year].filter(Boolean).join(', '),
+  }));
+
+  const contact_line = [p.email, p.phone, p.location, p.linkedin, p.github, p.website]
+    .filter(Boolean)
+    .map((x) => String(x))
+    .join('  |  ');
+
+  const meta = buildMetadata(cv, p);
 
   return {
     name: p.name || '',
@@ -95,28 +140,49 @@ function buildResumeViewModel(cvData, profile) {
     educations,
     skills_highlighted: skillsHighlighted,
     certifications,
+
+    skills_categories,
+    classic_experiences,
+    educations_classic,
+    certifications_classic,
+    contact_line,
+
+    document_title: meta.title,
+    meta_author: meta.author,
+    meta_subject: meta.subject,
+    meta_keywords: meta.keywords,
+    meta_description: meta.subject,
+    ats_keywords: meta.keywords,
   };
 }
 
+/**
+ * Compile handlebars HTML, then append Template.css inside <head>.
+ * DB `css` is always applied so preview/PDF stay in sync with the Templates collection.
+ */
 function renderHandlebarsTemplate({ html, css }, viewModel) {
   registerHelpersOnce();
   const tpl = Handlebars.compile(String(html || ''), { noEscape: false });
   const body = tpl(viewModel);
 
-  // If template already has <style>, we don't inject.
-  const hasStyle = /<style[\s>]/i.test(body);
-  if (!css || hasStyle) return body;
+  const extra =
+    css && String(css).trim()
+      ? `\n<style type="text/css">\n${String(css).trim()}\n</style>\n`
+      : '';
 
-  // Try to inject CSS into <head> for full HTML docs.
-  if (/<head[\s>]/i.test(body)) {
-    return body.replace(/<\/head>/i, `<style>\n${css}\n</style>\n</head>`);
+  if (!extra) return body;
+
+  if (/<\/head>/i.test(body)) return body.replace(/<\/head>/i, `${extra}</head>`);
+  if (/<head[\s>]/i.test(body)) return body.replace(/<head([^>]*)>/i, `<head$1>${extra}`);
+
+  if (/<html[\s>]/i.test(body)) {
+    return body.replace(/<html([^>]*)>/i, `<html$1><head><meta charset="UTF-8"/>${extra}</head>`);
   }
-  // Otherwise, prepend style.
-  return `<style>\n${css}\n</style>\n${body}`;
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>${extra}</head><body>${body}</body></html>`;
 }
 
 module.exports = {
   buildResumeViewModel,
   renderHandlebarsTemplate,
 };
-

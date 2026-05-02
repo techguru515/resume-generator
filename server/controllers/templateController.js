@@ -1,7 +1,7 @@
 const Template = require('../models/Template');
 const CV = require('../models/CV');
 const Profile = require('../models/Profile');
-const { buildResumeViewModel, renderHandlebarsTemplate } = require('../services/templateRenderService');
+const { renderResumeHtml } = require('../services/resumeRenderService');
 
 function ownerFilter(req) {
   if (req.user?.role === 'admin') return {};
@@ -50,20 +50,13 @@ exports.preview = async (req, res) => {
     const t = await Template.findOne({ _id: req.params.id, ...ownerFilter(req) });
     if (!t) return res.status(404).send('Template not found');
 
-    if (t.kind !== 'handlebars') {
-      return res
-        .status(400)
-        .send('Preview is currently supported for DB (handlebars) templates only.');
-    }
-
     const cv = await CV.findOne({ _id: cvId, ...cvOwnerFilter(req) });
     if (!cv) return res.status(404).send('CV not found');
 
     const profile = await Profile.findById(cv.profileId);
     if (!profile) return res.status(404).send('Profile not found');
 
-    const vm = buildResumeViewModel(cv.toObject(), profile.toObject());
-    const html = renderHandlebarsTemplate({ html: t.html, css: t.css }, vm);
+    const html = renderResumeHtml(cv.toObject(), profile.toObject(), t);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
   } catch (err) {
