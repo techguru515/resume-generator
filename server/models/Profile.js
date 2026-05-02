@@ -65,6 +65,11 @@ const ProfileSchema = new mongoose.Schema(
     cvFormat: { type: String, enum: CV_FORMATS, default: 'classic' },
     /** Selected template for PDF rendering (optional). */
     templateId: { type: 'ObjectId', ref: 'Template', default: null },
+    /**
+     * Server-side folder for extra copies when users download PDF/DOCX (optional).
+     * Empty uses project-root ./cv. Absolute OS path or path relative to project root (no ".." escape).
+     */
+    cvSaveFolder: { type: String, default: '', trim: true, maxlength: 2048 },
     cvGeneration: { type: CvGenerationSchema, default: () => ({}) },
   },
   { timestamps: true }

@@ -5,6 +5,7 @@ const { generatePdf, generateCoverLetterPdf } = require('../services/pdfService'
 const { generateCvJsonWithOpenAI } = require('../services/openaiCvService');
 const path = require('path');
 const fs = require('fs/promises');
+const { resolveCvSaveDir, getDefaultCvSaveDir } = require('../utils/cvSavePath');
 
 function safeBaseName(name) {
   const s = String(name || '').trim() || 'CV';
@@ -15,12 +16,20 @@ function safeBaseName(name) {
     .slice(0, 120);
 }
 
-async function saveDownloadCopy({ buffer, filename }) {
-  // Save into project-root ./cv (one level above /server)
-  const outDir = path.join(__dirname, '..', '..', 'cv');
-  await fs.mkdir(outDir, { recursive: true });
-  const outPath = path.join(outDir, filename);
-  await fs.writeFile(outPath, buffer);
+async function saveDownloadCopy({ buffer, filename, profile }) {
+  let outDir;
+  try {
+    outDir = resolveCvSaveDir(profile);
+  } catch (e) {
+    console.warn('CV save folder invalid, using default ./cv:', e?.message || e);
+    outDir = getDefaultCvSaveDir();
+  }
+  try {
+    await fs.mkdir(outDir, { recursive: true });
+    await fs.writeFile(path.join(outDir, filename), buffer);
+  } catch (e) {
+    console.warn('Could not write CV copy to disk:', e?.message || e);
+  }
 }
 
 function rawProfileIdRef(ref) {
@@ -165,7 +174,7 @@ exports.downloadDocx = async (req, res) => {
 
     const buffer = await generateDocx(cv.toObject(), profile.toObject(), { format });
     const filename = `${safeBaseName(profile.name)}.docx`;
-    await saveDownloadCopy({ buffer, filename });
+    await saveDownloadCopy({ buffer, filename, profile });
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -190,7 +199,7 @@ exports.downloadPdf = async (req, res) => {
       template: tpl,
     });
     const filename = `${safeBaseName(profile.name)}.pdf`;
-    await saveDownloadCopy({ buffer, filename });
+    await saveDownloadCopy({ buffer, filename, profile });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -213,7 +222,7 @@ exports.downloadCoverLetterPdf = async (req, res) => {
 
     const buffer = await generateCoverLetterPdf(cv.toObject(), profile.toObject());
     const filename = `${safeBaseName(profile.name)} - Cover Letter.pdf`;
-    await saveDownloadCopy({ buffer, filename });
+    await saveDownloadCopy({ buffer, filename, profile });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

@@ -1,4 +1,16 @@
 const Profile = require('../models/Profile');
+const { resolveCvSaveDir } = require('../utils/cvSavePath');
+
+function validateCvSaveFolderIfPresent(body) {
+  if (!body || typeof body !== 'object') return null;
+  if (!Object.prototype.hasOwnProperty.call(body, 'cvSaveFolder')) return null;
+  try {
+    resolveCvSaveDir({ cvSaveFolder: body.cvSaveFolder });
+    return null;
+  } catch (e) {
+    return e?.message || 'Invalid CV save folder';
+  }
+}
 
 // GET /api/profile — list all profiles for the logged-in user
 exports.list = async (req, res) => {
@@ -13,6 +25,8 @@ exports.list = async (req, res) => {
 // POST /api/profile — create a new profile
 exports.create = async (req, res) => {
   try {
+    const errMsg = validateCvSaveFolderIfPresent(req.body);
+    if (errMsg) return res.status(400).json({ error: errMsg });
     const profile = await Profile.create({ ...req.body, userId: req.user._id });
     res.status(201).json(profile);
   } catch (err) {
@@ -26,6 +40,8 @@ exports.update = async (req, res) => {
     const body = { ...(req.body || {}) };
     delete body.userId;
     delete body._id;
+    const errMsg = validateCvSaveFolderIfPresent(body);
+    if (errMsg) return res.status(400).json({ error: errMsg });
     const profile = await Profile.findOneAndUpdate(
       { _id: req.params.id, userId: req.user._id },
       body,

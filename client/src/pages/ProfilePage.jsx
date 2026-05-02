@@ -44,6 +44,7 @@ function emptyFormState() {
     certifications: [],
     cvFormat: 'classic',
     templateId: '',
+    cvSaveFolder: '',
     cvGeneration: defaultCvGeneration(),
   };
 }
@@ -91,40 +92,47 @@ function formatEducationLine(edu) {
 function ProfileCareerAndEducation({ profile }) {
   const works = Array.isArray(profile.workExperiences) ? profile.workExperiences : [];
   const edus = Array.isArray(profile.education) ? profile.education : [];
+  const cvSave = profile.cvSaveFolder != null ? String(profile.cvSaveFolder).trim() : '';
 
   return (
-    <div className="mt-3 grid grid-cols-1 gap-4 border-t border-gray-100 pt-3 md:grid-cols-2 md:gap-6">
-      <div className="min-w-0">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Career path</p>
-        {works.length === 0 ? (
-          <p className="text-xs text-gray-400">No work experience yet.</p>
-        ) : (
-          <ul className="space-y-2.5">
-            {works.map((w, i) => (
-              <li key={i} className="text-sm">
-                <p className="font-medium text-primary">{w.role || '—'}</p>
-                <p className="text-xs text-gray-600">{w.company || '—'}</p>
-                <p className="text-xs text-gray-400">{formatWorkDates(w) || '—'}</p>
-              </li>
-            ))}
-          </ul>
-        )}
+    <>
+      <div className="mt-3 grid grid-cols-1 gap-4 border-t border-gray-100 pt-3 md:grid-cols-2 md:gap-6">
+        <div className="min-w-0">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Career path</p>
+          {works.length === 0 ? (
+            <p className="text-xs text-gray-400">No work experience yet.</p>
+          ) : (
+            <ul className="space-y-2.5">
+              {works.map((w, i) => (
+                <li key={i} className="text-sm">
+                  <p className="font-medium text-primary">{w.role || '—'}</p>
+                  <p className="text-xs text-gray-600">{w.company || '—'}</p>
+                  <p className="text-xs text-gray-400">{formatWorkDates(w) || '—'}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Education</p>
+          {edus.length === 0 ? (
+            <p className="text-xs text-gray-400">No education yet.</p>
+          ) : (
+            <ul className="space-y-2.5">
+              {edus.map((edu, i) => (
+                <li key={i} className="text-sm text-gray-700">
+                  <p className="leading-snug">{formatEducationLine(edu)}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
-      <div className="min-w-0">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Education</p>
-        {edus.length === 0 ? (
-          <p className="text-xs text-gray-400">No education yet.</p>
-        ) : (
-          <ul className="space-y-2.5">
-            {edus.map((edu, i) => (
-              <li key={i} className="text-sm text-gray-700">
-                <p className="leading-snug">{formatEducationLine(edu)}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
+      <p className="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-500">
+        <span className="font-semibold text-gray-600">CV server copies:</span>{' '}
+        {cvSave || 'Default (project cv/)'}
+      </p>
+    </>
   );
 }
 
@@ -250,6 +258,7 @@ export default function ProfilePage() {
       certifications: profile.certifications?.length ? profile.certifications : [],
       cvFormat: profile.cvFormat || 'classic',
       templateId: profile.templateId?._id ? String(profile.templateId._id) : (profile.templateId ? String(profile.templateId) : ''),
+      cvSaveFolder: profile.cvSaveFolder != null ? String(profile.cvSaveFolder) : '',
       cvGeneration: {
         ...baseGen,
         ...cg,
@@ -340,6 +349,7 @@ export default function ProfilePage() {
     const ranges = (cg.experienceBulletRanges || []).map((x) => String(x).trim()).filter(Boolean);
     const payload = {
       ...form,
+      cvSaveFolder: String(form.cvSaveFolder || '').trim(),
       cvGeneration: {
         ...cg,
         yearsExperienceMention: (() => {
@@ -534,6 +544,32 @@ export default function ProfilePage() {
                   ))}
                   {form.certifications.length === 0 && <p className="text-xs text-gray-400 italic">No certifications yet.</p>}
                 </div>
+              </div>
+
+              {/* Server-side CV copies (per profile) */}
+              <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 space-y-2">
+                <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">CV copies on server</h4>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  When you download a CV (PDF or DOCX), the backend saves an extra copy on the machine running the API.
+                  Leave this empty to use the default project <code className="rounded bg-white/90 px-1 text-[11px]">cv/</code> folder.
+                  You can set an <strong>absolute</strong> folder (e.g. Windows:{' '}
+                  <code className="rounded bg-white/90 px-1 text-[11px]">D:\Data\CVs\Backend</code>)
+                  or a path <strong>relative to the project root</strong> (must not use <code className="text-[11px]">..</code> to leave the project).
+                  Hosted environments (e.g. Railway) often have an ephemeral filesystem unless you attach persistent storage.
+                </p>
+                <label htmlFor="cvSaveFolder" className="block text-xs font-semibold text-gray-700">
+                  Save folder path
+                </label>
+                <input
+                  id="cvSaveFolder"
+                  type="text"
+                  value={form.cvSaveFolder ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, cvSaveFolder: e.target.value }))}
+                  placeholder="Empty = default cv/ next to project root"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className={INPUT_CLS}
+                />
               </div>
             </div>
           )}
