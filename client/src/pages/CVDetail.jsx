@@ -52,6 +52,23 @@ function decodeCvCopyPathHeader(copyB64) {
   }
 }
 
+/** Same rules as server/controllers/cvController.js safeBaseName */
+function safeDownloadBaseName(raw) {
+  const s = String(raw ?? '').trim() || 'CV';
+  return s
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
+function downloadFileBaseName(profile, cv) {
+  const fromProfile = String(profile?.name ?? '').trim();
+  if (fromProfile) return safeDownloadBaseName(fromProfile);
+  const job = [cv?.company_name, cv?.role_title].filter(Boolean).join(' ').trim();
+  return safeDownloadBaseName(job);
+}
+
 /** @returns {Promise<{ serverCopyPath?: string; cancelled?: boolean }>} */
 async function downloadCvArtifact(url, filename, usePickerFirst) {
   const token = localStorage.getItem('token');
@@ -145,8 +162,9 @@ export default function CVDetail() {
   async function handleDownload(type) {
     setDownloading(type);
     try {
+      const nameBase = downloadFileBaseName(profile, cv);
       if (type === 'cover-letter-pdf') {
-        const filename = `CoverLetter_${cv.company_name}_${cv.role_title}.pdf`.replace(/[^a-z0-9_.]/gi, '_');
+        const filename = `${nameBase} - Cover Letter.pdf`;
         const { serverCopyPath, cancelled } = await downloadCvArtifact(
           downloadCoverLetterPdfUrl(id),
           filename,
@@ -157,7 +175,7 @@ export default function CVDetail() {
         return;
       }
       const ext = type === 'docx' ? 'docx' : 'pdf';
-      const filename = `CV_${cv.company_name}_${cv.role_title}.${ext}`.replace(/[^a-z0-9_.]/gi, '_');
+      const filename = `${nameBase}.${ext}`;
       const { serverCopyPath, cancelled } = await downloadCvArtifact(
         apiPublicUrl(`/cv/${id}/download/${type}`),
         filename,

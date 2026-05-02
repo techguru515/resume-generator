@@ -44,7 +44,6 @@ function emptyFormState() {
     certifications: [],
     cvFormat: 'classic',
     templateId: '',
-    cvSaveFolder: '',
     cvGeneration: defaultCvGeneration(),
   };
 }
@@ -92,7 +91,6 @@ function formatEducationLine(edu) {
 function ProfileCareerAndEducation({ profile }) {
   const works = Array.isArray(profile.workExperiences) ? profile.workExperiences : [];
   const edus = Array.isArray(profile.education) ? profile.education : [];
-  const cvSave = profile.cvSaveFolder != null ? String(profile.cvSaveFolder).trim() : '';
 
   return (
     <>
@@ -128,10 +126,6 @@ function ProfileCareerAndEducation({ profile }) {
           )}
         </div>
       </div>
-      <p className="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-500">
-        <span className="font-semibold text-gray-600">CV server copies:</span>{' '}
-        {cvSave || 'Default (project cv/)'}
-      </p>
     </>
   );
 }
@@ -258,7 +252,6 @@ export default function ProfilePage() {
       certifications: profile.certifications?.length ? profile.certifications : [],
       cvFormat: profile.cvFormat || 'classic',
       templateId: profile.templateId?._id ? String(profile.templateId._id) : (profile.templateId ? String(profile.templateId) : ''),
-      cvSaveFolder: profile.cvSaveFolder != null ? String(profile.cvSaveFolder) : '',
       cvGeneration: {
         ...baseGen,
         ...cg,
@@ -349,7 +342,6 @@ export default function ProfilePage() {
     const ranges = (cg.experienceBulletRanges || []).map((x) => String(x).trim()).filter(Boolean);
     const payload = {
       ...form,
-      cvSaveFolder: String(form.cvSaveFolder || '').trim(),
       cvGeneration: {
         ...cg,
         yearsExperienceMention: (() => {
@@ -544,38 +536,6 @@ export default function ProfilePage() {
                   ))}
                   {form.certifications.length === 0 && <p className="text-xs text-gray-400 italic">No certifications yet.</p>}
                 </div>
-              </div>
-
-              {/* Server-side CV copies (per profile) */}
-              <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 space-y-2">
-                <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">CV copies on server</h4>
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  When you download a CV (PDF or DOCX), the backend saves an extra copy on the <strong>machine running the API</strong> (not on your PC’s Downloads folder).
-                  Leave this empty to use the default project <code className="rounded bg-white/90 px-1 text-[11px]">cv/</code> folder.
-                  Use an <strong>absolute</strong> path in the <strong>same style as the server OS</strong>: on Windows locally use{' '}
-                  <code className="rounded bg-white/90 px-1 text-[11px]">D:\Data\CVs\Backend</code>; on Linux/Docker/Railway use{' '}
-                  <code className="rounded bg-white/90 px-1 text-[11px]">/tmp/cvs</code> or a path under the app —{' '}
-                  <strong className="text-gray-700">Windows drive letters do not work on Linux hosts.</strong>{' '}
-                  Or use a folder <strong>relative to the project root</strong> (no <code className="text-[11px]">..</code> outside the project).
-                  After downloading a CV, the CV page shows the resolved server path for the last save.
-                  Hosted environments often use an ephemeral disk unless you add persistent storage.
-                  <strong className="text-gray-700"> Your PC’s Downloads folder comes from the browser only</strong> — the server cannot write directly to{' '}
-                  <code className="text-[11px]">D:\...</code>. To keep CVs only on your machine via the hosted app, rely on downloads, or deploy the API on your own Windows PC, or disable server-side copies (
-                  <code className="text-[11px]">CV_DISABLE_SERVER_COPY=true</code> on Railway).
-                </p>
-                <label htmlFor="cvSaveFolder" className="block text-xs font-semibold text-gray-700">
-                  Save folder path
-                </label>
-                <input
-                  id="cvSaveFolder"
-                  type="text"
-                  value={form.cvSaveFolder ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, cvSaveFolder: e.target.value }))}
-                  placeholder="Empty = default cv/ next to project root"
-                  autoComplete="off"
-                  spellCheck={false}
-                  className={INPUT_CLS}
-                />
               </div>
             </div>
           )}

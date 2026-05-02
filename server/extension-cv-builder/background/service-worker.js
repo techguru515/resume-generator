@@ -2,8 +2,8 @@
 importScripts('../defaults.js');
 
 const FALLBACK = globalThis.CVB_DEFAULTS || {
-  apiBase: 'http://127.0.0.1:5000/api',
-  webAppOrigin: 'http://127.0.0.1:3000',
+  apiBase: 'https://resume-generator-production-b138.up.railway.app/api',
+  webAppOrigin: 'https://resume-generator-live.vercel.app',
 };
 
 chrome.runtime.onInstalled.addListener(() => {

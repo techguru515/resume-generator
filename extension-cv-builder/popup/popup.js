@@ -1,10 +1,12 @@
 const $ = (id) => document.getElementById(id);
 
-const FALLBACK =
-  globalThis.CVB_DEFAULTS || {
-    apiBase: 'http://127.0.0.1:5000/api',
-    webAppOrigin: 'http://127.0.0.1:3000',
-  };
+/** Must match extension/defaults.js if that script fails to load. */
+const HOSTED_FALLBACK = {
+  apiBase: 'https://resume-generator-production-b138.up.railway.app/api',
+  webAppOrigin: 'https://resume-generator-live.vercel.app',
+};
+
+const FALLBACK = globalThis.CVB_DEFAULTS || HOSTED_FALLBACK;
 
 const loginEl = $('login');
 const mainEl = $('main');
@@ -121,12 +123,13 @@ function normalizeApiBaseUrl(input) {
 /** SPA origin only (scheme + host, optional port); no trailing slash. */
 function normalizeWebAppOrigin(input) {
   const raw = String(input ?? '').trim().replace(/\/+$/, '');
-  if (!raw) return String(FALLBACK.webAppOrigin || '').trim().replace(/\/+$/, '') || 'http://127.0.0.1:3000';
+  const fb = String(FALLBACK.webAppOrigin || '').trim().replace(/\/+$/, '') || 'http://127.0.0.1:3000';
+  if (!raw) return fb;
   try {
     const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
     return new URL(withProto).origin;
   } catch {
-    return String(FALLBACK.webAppOrigin || '').trim().replace(/\/+$/, '') || 'http://127.0.0.1:3000';
+    return fb;
   }
 }
 
