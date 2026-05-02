@@ -88,7 +88,7 @@ mongoose
     } catch (e) {
       console.error('Template seed error:', e?.message || e);
     }
-    server = app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+    server = app.listen(PORT, () => console.log(`Server running on port: ${PORT}`));
     server.on('error', (err) => {
       // Avoid crashing without context; common case is EADDRINUSE when a previous process still owns the port.
       console.error('HTTP server error:', err?.message || err);
