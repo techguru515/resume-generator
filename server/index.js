@@ -7,7 +7,8 @@ const mongoose = require('mongoose');
 const app = express();
 app.use(cors({
   origin: "https://resume-generator-live.vercel.app",
-  credentials: true
+  credentials: true,
+  exposedHeaders: ['X-CV-Server-Copy-Path'],
 }));
 app.use(express.json({ limit: '10mb' }));
 

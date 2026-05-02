@@ -16,19 +16,45 @@ function safeBaseName(name) {
     .slice(0, 120);
 }
 
+function setCvCopyPathHeader(res, meta) {
+  if (!meta?.ok || !meta.path) return;
+  try {
+    res.setHeader('X-CV-Server-Copy-Path', Buffer.from(meta.path, 'utf8').toString('base64'));
+  } catch (_) {
+    /* ignore */
+  }
+}
+
 async function saveDownloadCopy({ buffer, filename, profile }) {
+  const configured =
+    profile?.cvSaveFolder != null && String(profile.cvSaveFolder).trim() !== '';
+
   let outDir;
   try {
     outDir = resolveCvSaveDir(profile);
   } catch (e) {
-    console.warn('CV save folder invalid, using default ./cv:', e?.message || e);
+    if (configured) {
+      console.error(
+        '[cv-save] Profile cvSaveFolder is set but invalid on this OS/path rules — using default ./cv. Folder was:',
+        JSON.stringify(profile.cvSaveFolder),
+        'Reason:',
+        e?.message || e
+      );
+    } else {
+      console.warn('[cv-save] resolve fallback:', e?.message || e);
+    }
     outDir = getDefaultCvSaveDir();
   }
+
+  const fullPath = path.join(outDir, filename);
   try {
     await fs.mkdir(outDir, { recursive: true });
-    await fs.writeFile(path.join(outDir, filename), buffer);
+    await fs.writeFile(fullPath, buffer);
+    console.log('[cv-save] wrote server copy:', fullPath);
+    return { ok: true, path: fullPath, dir: outDir };
   } catch (e) {
-    console.warn('Could not write CV copy to disk:', e?.message || e);
+    console.error('[cv-save] Could not write CV copy:', fullPath, e?.message || e);
+    return { ok: false, path: fullPath, dir: outDir, error: e?.message || String(e) };
   }
 }
 
@@ -174,7 +200,8 @@ exports.downloadDocx = async (req, res) => {
 
     const buffer = await generateDocx(cv.toObject(), profile.toObject(), { format });
     const filename = `${safeBaseName(profile.name)}.docx`;
-    await saveDownloadCopy({ buffer, filename, profile });
+    const copyMeta = await saveDownloadCopy({ buffer, filename, profile });
+    setCvCopyPathHeader(res, copyMeta);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -199,7 +226,8 @@ exports.downloadPdf = async (req, res) => {
       template: tpl,
     });
     const filename = `${safeBaseName(profile.name)}.pdf`;
-    await saveDownloadCopy({ buffer, filename, profile });
+    const copyMeta = await saveDownloadCopy({ buffer, filename, profile });
+    setCvCopyPathHeader(res, copyMeta);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -222,7 +250,8 @@ exports.downloadCoverLetterPdf = async (req, res) => {
 
     const buffer = await generateCoverLetterPdf(cv.toObject(), profile.toObject());
     const filename = `${safeBaseName(profile.name)} - Cover Letter.pdf`;
-    await saveDownloadCopy({ buffer, filename, profile });
+    const copyMeta = await saveDownloadCopy({ buffer, filename, profile });
+    setCvCopyPathHeader(res, copyMeta);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

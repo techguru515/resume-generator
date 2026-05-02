@@ -31,18 +31,33 @@ const REMOTE_STATUS_LABELS = {
   Unspecified: 'Not specified',
 };
 
+function decodeCvCopyPathHeader(copyB64) {
+  if (!copyB64 || typeof copyB64 !== 'string') return '';
+  try {
+    const bin = atob(copyB64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return '';
+  }
+}
+
+/** @returns {Promise<string>} resolved server filesystem path if API sent X-CV-Server-Copy-Path */
 async function downloadFile(url, filename) {
   const token = localStorage.getItem('token');
   const res = await axios.get(url, {
     headers: { Authorization: `Bearer ${token}` },
     responseType: 'blob',
   });
+  const serverCopyPath = decodeCvCopyPathHeader(res.headers['x-cv-server-copy-path']);
   const href = URL.createObjectURL(res.data);
   const a = document.createElement('a');
   a.href = href;
   a.download = filename;
   a.click();
   URL.revokeObjectURL(href);
+  return serverCopyPath;
 }
 
 async function copyToClipboard(text) {
@@ -92,6 +107,7 @@ export default function CVDetail() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
   const [activeTab, setActiveTab] = useState('ai');
+  const [lastServerCopyPath, setLastServerCopyPath] = useState('');
 
   useEffect(() => {
     getCV(id)
@@ -109,12 +125,14 @@ export default function CVDetail() {
     try {
       if (type === 'cover-letter-pdf') {
         const filename = `CoverLetter_${cv.company_name}_${cv.role_title}.pdf`.replace(/[^a-z0-9_.]/gi, '_');
-        await downloadFile(downloadCoverLetterPdfUrl(id), filename);
+        const p = await downloadFile(downloadCoverLetterPdfUrl(id), filename);
+        if (p) setLastServerCopyPath(p);
         return;
       }
       const ext = type === 'docx' ? 'docx' : 'pdf';
       const filename = `CV_${cv.company_name}_${cv.role_title}.${ext}`.replace(/[^a-z0-9_.]/gi, '_');
-      await downloadFile(apiPublicUrl(`/cv/${id}/download/${type}`), filename);
+      const p = await downloadFile(apiPublicUrl(`/cv/${id}/download/${type}`), filename);
+      if (p) setLastServerCopyPath(p);
     } catch (err) {
       alert(err.response?.data?.error || err.message);
     } finally {
@@ -227,6 +245,13 @@ export default function CVDetail() {
           )}
         </div>
       </div>
+
+      {lastServerCopyPath ? (
+        <p className="text-[11px] text-gray-500 -mt-4 max-w-5xl mx-auto">
+          Server-side copy (where the API runs):{' '}
+          <code className="rounded bg-gray-100 px-1 py-0.5 text-[10px] break-all">{lastServerCopyPath}</code>
+        </p>
+      ) : null}
 
       {/* Job Info Dashboard Card */}
       <div className={`rounded-2xl shadow border ${cfg.border} ${cfg.bg} p-6 space-y-5`}>

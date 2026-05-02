@@ -550,12 +550,15 @@ export default function ProfilePage() {
               <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 space-y-2">
                 <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">CV copies on server</h4>
                 <p className="text-xs text-gray-500 leading-relaxed">
-                  When you download a CV (PDF or DOCX), the backend saves an extra copy on the machine running the API.
+                  When you download a CV (PDF or DOCX), the backend saves an extra copy on the <strong>machine running the API</strong> (not on your PC’s Downloads folder).
                   Leave this empty to use the default project <code className="rounded bg-white/90 px-1 text-[11px]">cv/</code> folder.
-                  You can set an <strong>absolute</strong> folder (e.g. Windows:{' '}
-                  <code className="rounded bg-white/90 px-1 text-[11px]">D:\Data\CVs\Backend</code>)
-                  or a path <strong>relative to the project root</strong> (must not use <code className="text-[11px]">..</code> to leave the project).
-                  Hosted environments (e.g. Railway) often have an ephemeral filesystem unless you attach persistent storage.
+                  Use an <strong>absolute</strong> path in the <strong>same style as the server OS</strong>: on Windows locally use{' '}
+                  <code className="rounded bg-white/90 px-1 text-[11px]">D:\Data\CVs\Backend</code>; on Linux/Docker/Railway use{' '}
+                  <code className="rounded bg-white/90 px-1 text-[11px]">/tmp/cvs</code> or a path under the app —{' '}
+                  <strong className="text-gray-700">Windows drive letters do not work on Linux hosts.</strong>{' '}
+                  Or use a folder <strong>relative to the project root</strong> (no <code className="text-[11px]">..</code> outside the project).
+                  After downloading a CV, the CV page shows the resolved server path for the last save.
+                  Hosted environments often use an ephemeral disk unless you add persistent storage.
                 </p>
                 <label htmlFor="cvSaveFolder" className="block text-xs font-semibold text-gray-700">
                   Save folder path
