@@ -2,7 +2,6 @@ const CV = require('../models/CV');
 const Profile = require('../models/Profile');
 const { generateDocx } = require('../services/docxService');
 const { generatePdf, generateCoverLetterPdf } = require('../services/pdfService');
-const { generateCvJsonWithOpenAI } = require('../services/openaiCvService');
 const path = require('path');
 const fs = require('fs/promises');
 const { resolveCvSaveDir, getDefaultCvSaveDir } = require('../utils/cvSavePath');
@@ -82,59 +81,11 @@ function resolveDocxLayoutFormat(profile, tplPlain) {
   return profile.cvFormat || 'classic';
 }
 
-async function getProfileById(profileId) {
-  const id = rawProfileIdRef(profileId);
-  const profile = await Profile.findById(id);
-  if (!profile) throw new Error('Profile not found. Please select a valid profile.');
-  return profile;
-}
-
 function ownerFilter(req) {
   // Admins see all; clients see only their own
   if (req.user.role === 'admin') return {};
   return { userId: req.user._id };
 }
-
-// POST /api/cv/generate — OpenAI: extract job facts from unstructured text, then draft CV JSON (does not persist)
-exports.generateWithAi = async (req, res) => {
-  try {
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(503).json({
-        error: 'OpenAI is not configured. Add OPENAI_API_KEY to server/.env and restart.',
-      });
-    }
-    const { job_description, job_link, profileId } = req.body || {};
-    if (!profileId) return res.status(400).json({ error: 'profileId is required' });
-    const jd = job_description != null ? String(job_description).trim() : '';
-    if (!jd) return res.status(400).json({ error: 'job_description is required' });
-
-    const profile = await Profile.findOne({ _id: profileId, userId: req.user._id });
-    if (!profile) return res.status(404).json({ error: 'Profile not found' });
-
-    const payload = await generateCvJsonWithOpenAI({
-      jobDescription: jd,
-      jobLink: job_link != null ? String(job_link).trim() : '',
-      profile: profile.toObject(),
-    });
-    res.json(payload);
-  } catch (err) {
-    console.error('generateWithAi:', err.message);
-    res.status(500).json({ error: err.message || 'AI generation failed' });
-  }
-};
-
-// POST /api/cv
-exports.save = async (req, res) => {
-  try {
-    const { job_description, job_link, profileId, ...cvData } = req.body;
-    if (!profileId) return res.status(400).json({ error: 'profileId is required' });
-    const cv = new CV({ ...cvData, job_description, job_link, profileId, userId: req.user._id });
-    await cv.save();
-    res.status(201).json(cv);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-};
 
 // GET /api/cv
 exports.list = async (req, res) => {
@@ -158,21 +109,6 @@ exports.getOne = async (req, res) => {
     res.json(cv);
   } catch (err) {
     res.status(500).json({ error: err.message });
-  }
-};
-
-// PUT /api/cv/:id
-exports.update = async (req, res) => {
-  try {
-    const cv = await CV.findOneAndUpdate(
-      { _id: req.params.id, ...ownerFilter(req) },
-      req.body,
-      { new: true, runValidators: true }
-    );
-    if (!cv) return res.status(404).json({ error: 'CV not found' });
-    res.json(cv);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
   }
 };
 

@@ -29,16 +29,11 @@ export const changePassword = (data) => api.put('/auth/change-password', data).t
 export const updateAvatar = (avatar) => api.patch('/auth/avatar', { avatar }).then((r) => r.data);
 
 // CV (client)
-export const generateCvWithAi = (data) => api.post('/cv/generate', data).then((r) => r.data);
-export const saveCV = (data) => api.post('/cv', data).then((r) => r.data);
 export const listCVs = () => api.get('/cv').then((r) => r.data);
 export const getCV = (id) => api.get(`/cv/${id}`).then((r) => r.data);
-export const updateCV = (id, data) => api.put(`/cv/${id}`, data).then((r) => r.data);
 export const deleteCV = (id) => api.delete(`/cv/${id}`).then((r) => r.data);
 export const updateCVStatus = (id, status) =>
   api.post(`/cv/${encodeURIComponent(String(id))}/status`, { application_status: status }).then((r) => r.data);
-export const downloadDocxUrl = (id) => apiPublicUrl(`/cv/${id}/download/docx`);
-export const downloadPdfUrl = (id) => apiPublicUrl(`/cv/${id}/download/pdf`);
 export const downloadCoverLetterPdfUrl = (id) => apiPublicUrl(`/cv/${id}/download/cover-letter/pdf`);
 
 // AI assistant
@@ -54,7 +49,6 @@ export const deleteProfile = (id) => api.delete(`/profile/${id}`).then((r) => r.
 
 // Templates
 export const listTemplates = () => api.get('/template').then((r) => r.data);
-export const getTemplate = (id) => api.get(`/template/${id}`).then((r) => r.data);
 
 // Workspace (saved hyperlinks from uploads)
 export const listWorkspaceLinks = (params) =>

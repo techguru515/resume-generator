@@ -11,8 +11,8 @@ A full-stack CV management platform built with the **MERN stack** that lets user
 * 🔐 JWT authentication (login/register)
 * ⛔ Access gated until admin approval
 * 👥 Multiple profiles per user (contact, education, certifications)
-* 🧠 Draft CVs with OpenAI from the job description (server `OPENAI_API_KEY`)
-* 📝 Create CV with profile selection
+* 🧠 Generate CVs with OpenAI from job links + JD on **Workspace** (server `OPENAI_API_KEY`)
+* 📝 Chrome extension / Workspace flow (save link → JD → generate)
 * 👀 Live CV preview (fully merged with profile data)
 * 📥 Download CV as **PDF** and **DOCX**
 * 🎨 Resume templates (per profile, 3 options):
@@ -24,7 +24,7 @@ A full-stack CV management platform built with the **MERN stack** that lets user
 * 🔗 Store and view job links
 * 🧭 Track application status:
 
-  * Saved / Applied / Interview / Offer / Rejected
+  * Saved / Applied / Interview / Offer / Failed
 * 🧩 Drag & drop Kanban board (Progress page)
 * ✅ Workspace link table status indicators:
 
@@ -187,27 +187,19 @@ npm run dev
 
 1. User registers → `role: client`
 2. Admin must approve user
-3. Only approved users can:
-
-   * Create CV
-   * Download files
-   * Use dashboard
+3. Only approved users can use Workspace generation, downloads, and the dashboard.
 
 ---
 
 ## 📄 CV Generation Flow
 
-1. User selects a profile
-2. Pastes unstructured job text and runs **Generate draft** (`OPENAI_API_KEY` on the server)
-3. Backend calls OpenAI **twice**: (1) normalize the posting into structured job fields, (2) generate CV JSON from that structure plus the profile
-4. Preview is generated
-5. Save CV → stored in MongoDB
-6. Download:
+1. User saves job URLs on **Workspace** (or via the Chrome extension), assigns a profile, pastes JD text.
+2. **Generate** calls the API; backend uses OpenAI **twice**: (1) normalize the posting, (2) produce CV JSON from that structure plus the profile.
+3. CV is persisted in MongoDB and linked from the workspace row.
+4. Download from CV detail / extension:
 
    * DOCX → `docx` library
-   * PDF → Puppeteer
-
-> While generating, the UI shows a full-screen loading overlay and disables interactions until the request completes.
+   * PDF → Puppeteer + templates
 
 ---
 
@@ -221,7 +213,7 @@ application_status:
 - applied
 - interview
 - offer
-- rejected
+- failed
 ```
 
 ---

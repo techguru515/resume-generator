@@ -547,7 +547,7 @@ export default function ProfilePage() {
                 <div>
                   <h4 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">CV generation</h4>
                   <p className="text-xs text-gray-500 mt-1">
-                    Controls the OpenAI <strong>system</strong> message for <strong className="text-gray-700">Create CV</strong> and workspace bulk generate. The candidate profile (without these settings) is still sent in the user message.
+                    Controls the OpenAI <strong>system</strong> message for <strong className="text-gray-700">Workspace</strong> generation and bulk generate. The candidate profile (without these settings) is still sent in the user message.
                   </p>
                 </div>
 
@@ -780,7 +780,7 @@ export default function ProfilePage() {
 
       {!editing && (
         <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-gray-700">
-          <p className="font-semibold text-primary mb-2">CV generation (Create CV) — how this profile is used</p>
+          <p className="font-semibold text-primary mb-2">CV generation (Workspace) — how this profile is used</p>
           <ul className="list-disc pl-5 space-y-1.5 text-xs leading-relaxed text-gray-600">
             <li>
               <span className="font-medium text-gray-700">Contact block</span> — name, email, phone, location, LinkedIn, GitHub, and website from this profile appear on the CV header.
