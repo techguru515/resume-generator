@@ -104,7 +104,12 @@ exports.list = async (req, res) => {
 // GET /api/cv/:id
 exports.getOne = async (req, res) => {
   try {
-    const cv = await CV.findOne({ _id: req.params.id, ...ownerFilter(req) });
+    const cv = await CV.findOne({ _id: req.params.id, ...ownerFilter(req) }).populate({
+      path: 'profileId',
+      // Omit cvGeneration (can be very large); client preview only needs resume fields.
+      select:
+        'label name email phone location linkedin github website cvFormat workExperiences education certifications',
+    });
     if (!cv) return res.status(404).json({ error: 'CV not found' });
     res.json(cv);
   } catch (err) {

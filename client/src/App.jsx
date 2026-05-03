@@ -1,18 +1,19 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
-import Dashboard from './pages/Dashboard.jsx';
-import Workspace from './pages/Workspace.jsx';
-import Progress from './pages/Progress.jsx';
-import CVDetail from './pages/CVDetail.jsx';
-import ProfilePage from './pages/ProfilePage.jsx';
-import AccountPage from './pages/AccountPage.jsx';
-import AdminDashboard from './pages/AdminDashboard.jsx';
-import AdminClients from './pages/AdminClients.jsx';
-import AdminCVs from './pages/AdminCVs.jsx';
-import AdminProgress from './pages/AdminProgress.jsx';
-import Login from './pages/Login.jsx';
-import Register from './pages/Register.jsx';
+
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
+const Workspace = lazy(() => import('./pages/Workspace.jsx'));
+const Progress = lazy(() => import('./pages/Progress.jsx'));
+const CVDetail = lazy(() => import('./pages/CVDetail.jsx'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage.jsx'));
+const AccountPage = lazy(() => import('./pages/AccountPage.jsx'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard.jsx'));
+const AdminClients = lazy(() => import('./pages/AdminClients.jsx'));
+const AdminCVs = lazy(() => import('./pages/AdminCVs.jsx'));
+const AdminProgress = lazy(() => import('./pages/AdminProgress.jsx'));
+const Login = lazy(() => import('./pages/Login.jsx'));
+const Register = lazy(() => import('./pages/Register.jsx'));
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { user, loading } = useAuth();
@@ -155,24 +156,26 @@ function Layout() {
       </nav>
 
       <main className="max-w-6xl mx-auto px-4 py-8">
-        <Routes>
-          {/* Client routes */}
-          <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/create" element={<ProtectedRoute><Navigate to="/workspace" replace /></ProtectedRoute>} />
-          <Route path="/workspace" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
-          <Route path="/progress" element={<ProtectedRoute><Progress /></ProtectedRoute>} />
+        <Suspense fallback={<div className="text-gray-400 text-sm py-12 text-center">Loading page…</div>}>
+          <Routes>
+            {/* Client routes */}
+            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/create" element={<ProtectedRoute><Navigate to="/workspace" replace /></ProtectedRoute>} />
+            <Route path="/workspace" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
+            <Route path="/progress" element={<ProtectedRoute><Progress /></ProtectedRoute>} />
 
-          {/* Shared */}
-          <Route path="/cv/:id" element={<ProtectedRoute><CVDetail /></ProtectedRoute>} />
-          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-          <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
+            {/* Shared */}
+            <Route path="/cv/:id" element={<ProtectedRoute><CVDetail /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+            <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
 
-          {/* Admin */}
-          <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/clients" element={<ProtectedRoute adminOnly><AdminClients /></ProtectedRoute>} />
-          <Route path="/admin/cvs" element={<ProtectedRoute adminOnly><AdminCVs /></ProtectedRoute>} />
-          <Route path="/admin/progress" element={<ProtectedRoute adminOnly><AdminProgress /></ProtectedRoute>} />
-        </Routes>
+            {/* Admin */}
+            <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
+            <Route path="/admin/clients" element={<ProtectedRoute adminOnly><AdminClients /></ProtectedRoute>} />
+            <Route path="/admin/cvs" element={<ProtectedRoute adminOnly><AdminCVs /></ProtectedRoute>} />
+            <Route path="/admin/progress" element={<ProtectedRoute adminOnly><AdminProgress /></ProtectedRoute>} />
+          </Routes>
+        </Suspense>
       </main>
     </div>
   );
@@ -181,11 +184,13 @@ function Layout() {
 export default function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
-        <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
-        <Route path="/*" element={<Layout />} />
-      </Routes>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">Loading…</div>}>
+        <Routes>
+          <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
+          <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
+          <Route path="/*" element={<Layout />} />
+        </Routes>
+      </Suspense>
     </AuthProvider>
   );
 }

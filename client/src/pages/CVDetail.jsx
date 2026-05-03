@@ -151,14 +151,44 @@ export default function CVDetail() {
   }, [id]);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    setCv(null);
+    setProfile(null);
     getCV(id)
       .then((data) => {
+        if (cancelled) return;
         setCv(data);
+        const embedded =
+          data.profileId &&
+          typeof data.profileId === 'object' &&
+          !Array.isArray(data.profileId) &&
+          data.profileId._id != null
+            ? data.profileId
+            : null;
+        if (embedded) {
+          setProfile(embedded);
+          return;
+        }
         const pid = profileRefToIdString(data.profileId);
-        if (pid) getProfileById(pid).then(setProfile).catch(() => {});
+        if (pid) {
+          return getProfileById(pid)
+            .then((p) => {
+              if (!cancelled) setProfile(p);
+            })
+            .catch(() => {});
+        }
       })
-      .catch((err) => setError(err.response?.data?.error || err.message))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!cancelled) setError(err.response?.data?.error || err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   async function handleDownload(type) {

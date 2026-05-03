@@ -313,25 +313,45 @@ export default function Workspace() {
   const [jdSaveErrorByLinkId, setJdSaveErrorByLinkId] = useState({});
   const jdSaveTimersRef = useRef({});
 
-  useEffect(() => {
-    listProfiles()
-      .then((data) => {
-        setProfiles(Array.isArray(data) ? data : []);
-      })
-      .catch(() => {});
-  }, []);
-
+  // Single parallel fetch for profiles + links + CVs (avoids waterfall vs separate effects).
   useEffect(() => {
     if (!user?.isApproved && user?.role !== 'admin') {
+      setProfiles([]);
+      setSavedLinks([]);
+      setCvList([]);
       setLoadingSavedLinks(false);
+      setLoadingCvs(false);
       return;
     }
+
+    let cancelled = false;
     setLoadingSavedLinks(true);
+    setLoadingCvs(true);
     setLinksError('');
-    listWorkspaceLinks()
-      .then((d) => setSavedLinks(Array.isArray(d) ? d : []))
-      .catch(() => setSavedLinks([]))
-      .finally(() => setLoadingSavedLinks(false));
+
+    Promise.all([listProfiles(), listWorkspaceLinks(), listCVs()])
+      .then(([p, links, cvs]) => {
+        if (cancelled) return;
+        setProfiles(Array.isArray(p) ? p : []);
+        setSavedLinks(Array.isArray(links) ? links : []);
+        setCvList(Array.isArray(cvs) ? cvs : []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setLinksError(err.response?.data?.error || err.message || 'Failed to load workspace');
+        setProfiles([]);
+        setSavedLinks([]);
+        setCvList([]);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoadingSavedLinks(false);
+        setLoadingCvs(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   // Hydrate local JD cache from DB (without overwriting local edits).
@@ -349,14 +369,6 @@ export default function Workspace() {
       return next;
     });
   }, [savedLinks]);
-
-  useEffect(() => {
-    if (!user?.isApproved && user?.role !== 'admin') return;
-    listCVs()
-      .then(setCvList)
-      .catch(() => setCvList([]))
-      .finally(() => setLoadingCvs(false));
-  }, [user]);
 
   async function deleteCvById(cvId) {
     const id = String(cvId || '');

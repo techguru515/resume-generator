@@ -1,12 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listCVs, deleteCV, updateCVStatus, listProfiles } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { profileRefToIdString } from '../utils/profileRef.js';
-import {
-  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
-} from 'recharts';
 import Pagination from '../components/Pagination.jsx';
+
+const DashboardStatusChart = lazy(() => import('./DashboardStatusChart.jsx'));
 
 const STATUS_CONFIG = {
   saved:     { label: 'Created',   color: 'bg-gray-100 text-gray-600',    dot: 'bg-gray-400' },
@@ -18,10 +17,6 @@ const STATUS_CONFIG = {
 
 const ALL_STATUSES = Object.keys(STATUS_CONFIG);
 const PAGE_SIZE = 5;
-
-const CHART_COLORS = {
-  saved: '#9ca3af', applied: '#3b82f6', interview: '#f59e0b', offer: '#22c55e', failed: '#f43f5e',
-};
 
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.saved;
@@ -239,65 +234,21 @@ export default function Dashboard() {
 
       <h2 className="text-xl font-bold text-primary">My Dashboard</h2>
 
-      {/* Status donut chart */}
-      {cvList.length > 0 && (() => {
-        const pieData = ALL_STATUSES
-          .map((s) => ({ name: STATUS_CONFIG[s].label, value: totalStats[s], key: s }))
-          .filter((d) => d.value > 0);
-
-        return (
-          <div className="bg-white rounded-2xl shadow p-5 flex flex-col sm:flex-row items-center gap-6">
-            <div className="shrink-0">
-              <p className="text-sm font-bold text-primary mb-0.5">Application Status</p>
-              <p className="text-xs text-gray-400 mb-3">Your pipeline at a glance.</p>
-              <ResponsiveContainer width={200} height={200}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={58}
-                    outerRadius={90}
-                    paddingAngle={3}
-                    dataKey="value"
-                    strokeWidth={0}
-                  >
-                    {pieData.map((entry) => (
-                      <Cell key={entry.key} fill={CHART_COLORS[entry.key]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
-                    formatter={(value, name) => [`${value} CV${value !== 1 ? 's' : ''}`, name]}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Legend + stats */}
-            <div className="flex-1 grid grid-cols-1 gap-2 w-full">
-              {ALL_STATUSES.map((s) => {
-                const count = totalStats[s];
-                const pct = cvList.length > 0 ? Math.round((count / cvList.length) * 100) : 0;
-                return (
-                  <div key={s} className="flex items-center gap-3">
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: CHART_COLORS[s] }} />
-                    <span className="text-sm text-gray-600 w-20">{STATUS_CONFIG[s].label}</span>
-                    <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{ width: `${pct}%`, background: CHART_COLORS[s] }}
-                      />
-                    </div>
-                    <span className="text-sm font-semibold text-primary w-6 text-right">{count}</span>
-                  </div>
-                );
-              })}
-              <p className="text-xs text-gray-400 mt-1">{cvList.length} total application{cvList.length !== 1 ? 's' : ''}</p>
-            </div>
-          </div>
-        );
-      })()}
+      {/* Status donut chart (recharts in separate lazy chunk) */}
+      {cvList.length > 0 && (
+        <Suspense
+          fallback={(
+            <div className="bg-white rounded-2xl shadow p-5 h-[220px] bg-gradient-to-r from-gray-50 to-slate-50 animate-pulse" aria-hidden />
+          )}
+        >
+          <DashboardStatusChart
+            allStatuses={ALL_STATUSES}
+            statusConfig={STATUS_CONFIG}
+            totalStats={totalStats}
+            cvListLength={cvList.length}
+          />
+        </Suspense>
+      )}
 
       {/* Profile cards */}
       {profiles.length === 0 ? (
