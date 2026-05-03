@@ -136,9 +136,7 @@ export default function CVDetail() {
   const [aiError, setAiError] = useState('');
   const [activeTab, setActiveTab] = useState('preview');
   const [lastServerCopyPath, setLastServerCopyPath] = useState('');
-  const [preferSavePicker, setPreferSavePicker] = useState(() =>
-    pickerSaveSupported() ? readPreferSavePicker() : false
-  );
+  const [preferSavePicker, setPreferSavePicker] = useState(true);
 
   useEffect(() => {
     try {
