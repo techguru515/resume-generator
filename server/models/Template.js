@@ -18,5 +18,8 @@ const TemplateSchema = new mongoose.Schema(
 );
 
 TemplateSchema.index({ name: 1 });
+// Client template list: $or on isPublic / createdBy + sort by createdAt
+TemplateSchema.index({ isPublic: 1, createdAt: 1 });
+TemplateSchema.index({ createdBy: 1, createdAt: 1 });
 
 module.exports = mongoose.model('Template', TemplateSchema);

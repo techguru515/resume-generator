@@ -10,7 +10,7 @@ const CvErrorHistoryEntrySchema = new mongoose.Schema(
 
 const UploadedLinkSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     profileId: { type: mongoose.Schema.Types.ObjectId, ref: 'Profile', default: null },
     sourceFileName: { type: String, required: true },
     url: { type: String, required: true },
@@ -33,5 +33,9 @@ const UploadedLinkSchema = new mongoose.Schema(
 );
 
 UploadedLinkSchema.index({ userId: 1, normalizedUrl: 1 });
+// Workspace GET list + post-generate refresh: sort by activity
+UploadedLinkSchema.index({ userId: 1, updatedAt: -1, createdAt: -1 });
+// Optional ?profileId= filter with same sort
+UploadedLinkSchema.index({ userId: 1, profileId: 1, updatedAt: -1 });
 
 module.exports = mongoose.model('UploadedLink', UploadedLinkSchema);

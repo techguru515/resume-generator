@@ -35,4 +35,11 @@ const CVSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Client/admin CV lists and per-user admin views
+CVSchema.index({ userId: 1, createdAt: -1 });
+// Admin dashboard: all CVs sorted by recency
+CVSchema.index({ createdAt: -1 });
+// Workspace link repair: newest CV for user + JD
+CVSchema.index({ userId: 1, jobDescriptionId: 1, createdAt: -1 });
+
 module.exports = mongoose.model('CV', CVSchema);

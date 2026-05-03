@@ -23,4 +23,8 @@ UserSchema.methods.comparePassword = function (plain) {
   return bcrypt.compare(plain, this.password);
 };
 
+// Admin client list (role + sort); stats counts by role / approval
+UserSchema.index({ role: 1, createdAt: -1 });
+UserSchema.index({ role: 1, isApproved: 1 });
+
 module.exports = mongoose.model('User', UserSchema);
