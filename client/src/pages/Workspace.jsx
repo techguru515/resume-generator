@@ -1165,7 +1165,7 @@ ${items}
                 )}
               </div>
               <div className="border border-gray-200 rounded-xl overflow-hidden">
-                <div className="max-h-[520px] overflow-y-auto overflow-x-hidden">
+                <div className="overflow-x-hidden">
                   <table className="w-full text-sm table-fixed min-w-0">
                     <thead>
                         <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide sticky top-0 z-10">
@@ -1667,7 +1667,7 @@ ${items}
             </div>
           ) : (
             <div className="border border-gray-200 rounded-xl overflow-hidden">
-              <div className="max-h-[520px] overflow-y-auto overflow-x-auto">
+              <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[720px]">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide sticky top-0 z-10">
